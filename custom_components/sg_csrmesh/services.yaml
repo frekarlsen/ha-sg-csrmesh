@@ -1,0 +1,41 @@
+capture:
+  fields:
+    seconds:
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 600
+          unit_of_measurement: s
+
+send:
+  fields:
+    messages:
+      required: true
+      example: '["66f8ff17e7a40002"]'
+      selector:
+        object:
+    repeats:
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 5
+send_on_press:
+  fields:
+    source:
+      required: true
+      example: "f866"
+      selector:
+        text:
+    messages:
+      required: true
+      selector:
+        object:
+    timeout:
+      default: 60
+      selector:
+        number:
+          min: 5
+          max: 300
+          unit_of_measurement: s

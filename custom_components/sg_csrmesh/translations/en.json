@@ -1,0 +1,233 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "SG Smart Gen1 (CSRmesh)",
+        "description": "Enter the network passphrase of your SG installation (usually 1234). A raw 16-byte network key in hex overrides the passphrase.",
+        "data": {
+          "passphrase": "Network passphrase / PIN",
+          "network_key": "Raw network key (hex, optional)"
+        }
+      }
+    },
+    "error": {
+      "invalid_key": "The key must be 32 hex characters."
+    },
+    "abort": {
+      "already_configured": "The SG Gen1 network is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SG Smart Gen1",
+        "description": "What do you want to do?",
+        "menu_options": {
+          "migrate_device": "Move a device from the SG gateway",
+          "add_by_address": "Add by mesh address (advanced)",
+          "remove_device": "Remove devices",
+          "settings": "Settings",
+          "add_new": "Add a new (factory reset) device"
+        }
+      },
+      "remove_device": {
+        "title": "Remove a device",
+        "description": "With factory reset the device also leaves the mesh (as when deleting it in the SG app), so it can be added again with Add a new device. Without it, the device is only removed from HA and keeps working in the mesh; a device moved from the SG gateway goes back to the gateway's HomeKit entities.",
+        "data": {
+          "device": "Device",
+          "factory_reset": "Factory reset (leave the mesh)"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "data": {
+          "poll_interval": "Status poll interval (0 = off)",
+          "min_level": "Minimum dim level"
+        },
+        "data_description": {
+          "poll_interval": "The dimmers do not report changes by themselves; HA asks for status this often.",
+          "min_level": "Lowest level HA sends, to keep the slider out of the dimmer's dead zone."
+        }
+      },
+      "add_by_address": {
+        "title": "Add by mesh address",
+        "description": "Pick a mesh address heard on the network (run \"Capture frames\" first and toggle the lamp), or type the address in hex, e.g. CA67.",
+        "data": {
+          "mesh_id": "Mesh id",
+          "name": "Name",
+          "kind": "Device type"
+        }
+      },
+      "migrate_device": {
+        "title": "Move from SG gateway",
+        "description": "{count} devices are still owned by the SG gateway (through HomeKit). Pick one. HA will make the gateway talk to it and watch the mesh to find its address: a lamp switches briefly on or off, a thermostat's set-point moves half a degree for a moment, and for a Smart Switch you press a button.",
+        "data": {
+          "device": "Device",
+          "hide_homekit": "Disable the gateway's HomeKit copy afterwards"
+        }
+      },
+      "migrate_press": {
+        "title": "Press a button on {name}",
+        "description": "Click Submit, then press any button on **{name}** within a minute. The switch's own message tells HA its address."
+      },
+      "migrate_confirm": {
+        "title": "Found {name}",
+        "description": "**{name}** ({model}) has mesh address **{address}**. Did the right device react? You can flash it once more from HA directly (without the gateway) to be sure.",
+        "menu_options": {
+          "migrate_save": "Yes – add it to HA",
+          "migrate_blink": "Blink it again (from HA)",
+          "migrate_device": "No – pick another device"
+        }
+      },
+      "add_new": {
+        "title": "Add a new device",
+        "description": "Power the new device (a battery switch: press a button to wake it) and keep it close to an existing SG Gen1 device. HA joins it to your network with the network PIN; the SG gateway is not involved. Click Submit to search."
+      },
+      "add_new_pick": {
+        "title": "Found {count} new device(s)",
+        "description": "Devices are listed by their Bluetooth address (printed on some labels).",
+        "data": {
+          "device": "Device",
+          "name": "Name",
+          "kind": "Type",
+          "area_id": "Room"
+        }
+      },
+      "add_new_none": {
+        "title": "No new devices found",
+        "description": "Nothing answered. Is the device factory reset and powered, and a battery switch awake? Some devices only accept joining for a few minutes after power-up.",
+        "menu_options": {
+          "add_new": "Search again",
+          "init": "Back"
+        }
+      },
+      "remove_press": {
+        "title": "Wake {name}",
+        "description": "Click Submit, then press any button on {name} within a minute. HA sends the reset while it is awake."
+      }
+    },
+    "error": {
+      "invalid_mesh_id": "Not a valid mesh id.",
+      "already_added": "That device is already added."
+    },
+    "progress": {
+      "identify": "Making the SG gateway talk to {name} and watching the mesh …",
+      "switch": "Waiting for a button press on {name} …",
+      "scan": "Searching for new devices …",
+      "associate": "Joining {name} to the network (key exchange, up to a minute) …",
+      "reset": "Resetting {name} …"
+    },
+    "abort": {
+      "not_loaded": "The integration is not loaded.",
+      "no_devices": "No devices added yet.",
+      "nothing_to_migrate": "Every SG Gen1 device from the gateway has been moved.",
+      "identify_no_reaction": "{name} did not show up in the mesh. Is the gateway online, and does the device work from HomeKit? For a switch: press a button within the minute.",
+      "identify_ambiguous": "Several devices reacted at the same time. Try {name} again.",
+      "identify_homekit_unavailable": "The gateway's HomeKit entity for {name} is unavailable.",
+      "identify_no_homekit_entity": "{name} has no HomeKit light or thermostat to trigger.",
+      "identify_error": "Could not identify {name}: {error}",
+      "add_new_failed": "Could not add {name}: {error}. Power-cycle the device and try again; after a failed attempt a device may refuse for about two minutes.",
+      "reset_no_press": "{name} did not wake up within a minute; nothing was changed.",
+      "reset_still_in_mesh": "{name} is still answering on the mesh, so it was not factory reset. It stays in Home Assistant; nothing was changed."
+    }
+  },
+  "selector": {
+    "kind": {
+      "options": {
+        "dimmer": "Dimmer (LEDDim Smart / Pill Micro)",
+        "onoff": "On/off (Smart Pill On/Off)",
+        "switch": "Smart Switch (buttons)",
+        "thermostat": "HeatReg Smart (thermostat)"
+      }
+    }
+  },
+  "entity": {
+    "event": {
+      "top_left": {
+        "name": "Top left",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Press"
+            }
+          }
+        }
+      },
+      "bottom_left": {
+        "name": "Bottom left",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Press"
+            }
+          }
+        }
+      },
+      "bottom_right": {
+        "name": "Bottom right",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Press"
+            }
+          }
+        }
+      },
+      "top_right": {
+        "name": "Top right",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Press"
+            }
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "capture": {
+      "name": "Capture frames",
+      "description": "Log every decrypted frame on your network for a while. Use it to map Smart Switch and HeatReg messages.",
+      "fields": {
+        "seconds": {
+          "name": "Duration",
+          "description": "How long to listen."
+        }
+      }
+    },
+    "send": {
+      "name": "Send raw mesh messages (developer)",
+      "description": "Seal and send MCP messages given as hex (destination LE + opcode + body).",
+      "fields": {
+        "messages": {
+          "name": "Messages",
+          "description": "List of hex strings."
+        },
+        "repeats": {
+          "name": "Repeats",
+          "description": "Copies of each message."
+        }
+      }
+    },
+    "send_on_press": {
+      "name": "Send when a switch wakes (developer)",
+      "description": "Wait for the next message from a battery switch, then send the messages while it is awake.",
+      "fields": {
+        "source": {
+          "name": "Switch address",
+          "description": "Mesh address, hex."
+        },
+        "messages": {
+          "name": "Messages",
+          "description": "List of hex strings."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "How long to wait for a press."
+        }
+      }
+    }
+  }
+}

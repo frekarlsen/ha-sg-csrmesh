@@ -1,0 +1,33 @@
+{
+  "domain": "sg_csrmesh",
+  "name": "SG Smart Gen1 (CSRmesh)",
+  "bluetooth": [
+    {
+      "local_name": "@ND*",
+      "connectable": true
+    },
+    {
+      "service_uuid": "0000fef1-0000-1000-8000-00805f9b34fb",
+      "connectable": true
+    }
+  ],
+  "codeowners": [
+    "@frekarlsen"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "bluetooth"
+  ],
+  "documentation": "https://github.com/frekarlsen/ha-sg-csrmesh",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/frekarlsen/ha-sg-csrmesh/issues",
+  "loggers": [
+    "custom_components.sg_csrmesh"
+  ],
+  "requirements": [
+    "cryptography>=42",
+    "recsrmesh==0.3.0"
+  ],
+  "version": "0.6.2"
+}
