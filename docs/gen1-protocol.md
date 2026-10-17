@@ -1,7 +1,7 @@
 # SG Smart Gen1 (CSRmesh) – enhetsinnstillinger og bryterparing (protokollnotat)
 
 Kilde: SG Smart-appen 5.0.958 (`com.sgas.leddimapp`, arm64 fra Google Play). Dart-koden er dekompilert
-med blutter 17.10.2026, og Java-delen med jadx. **Ingenting her er testet på maskinvare ennå**, med mindre
+med blutter 17.10.2026, og Java-delen med jadx. Kommandoene er ikke testet på maskinvare, med mindre
 det står «verifisert».
 
 Kodenavnene under (`sendSetTrimLevelCommand` osv.) er appens egne. De står her for at funnene skal kunne
@@ -32,7 +32,7 @@ Alle bytene står etter taggen.
 | Innstilling | Opkode | Data | Verdier | Svar |
 |---|---|---|---|---|
 | Sett trim | `FF29` | `KIND IDX` | KIND `01` min, `02` oppstart, `03` maks. IDX er en **indeks i tabell** (se punkt 3) | `FF08 29 KIND …` |
-| Les trim | `FF2A` | – | | `FF2B MIN START MAKS ?` (indekser, minst 4 byte) |
+| Les trim | `FF2A` | – | | `FF2B MIN START MAKS 00 00` (indekser). **Verifisert** 17.10.2026, se punkt 6.1 |
 | Modus | `FF39` | `MODE` | `00` dimming, `01` TW, `02` av/på, `03` nedtelling, `04` RGB, `05` RGBW, `06` puls | `FF08 39 …` |
 | Ekstern trykkbryter | `FF47` | `OPT` | `00` normal, `01` sensor (**ikke** `01`/`02` som i 3.0) | `FF08 47 …` |
 | Fading + dimmehastighet | `FF48` | `FADE SPEED` | FADE i tideler sekund (som i 3.0: `05`, `0A`, `14`, `1E`). SPEED `00` normal, `01` rask | `FF08 48 …` |
@@ -102,6 +102,22 @@ styre (`SetSwitchButtonMeshIdGen2Task` → `FF13`). Det betyr:
   par. Det avgjøres raskest ved å fange trafikken når SG-appen parer en knapp (se test 6).
 
 ## 6. Test på maskinvare
+
+### 6.1 Resultater
+
+**17.10.2026: `9640` «Lys Vaskerom».** Enheten er lagt til fra HA, så taggen er `0000`. Modellen er
+ukjent, men den har trim, og da er den ikke en eldre `Dimmer`. Lampen var av.
+
+- Les trim: sendt `4096ff2a0000`, to ganger. Svaret kom innen 0,3 s på begge:
+  `9640 → 0080 ff2b 0000 35 54 32 00 00`.
+  - Indeks `35` (53), `54` (84) og `32` (50) gir min 10 %, oppstart 30 % og maks 100 %. Det er det samme
+    som 3.0-pillens fabrikkverdier.
+  - Tolket som halv-prosent ville det blitt 26,5 / 42 / 50 %. Da ville oppstart ligget over appens grense på
+    40 %. **Indeksformatet er dermed bekreftet**, og taggen `0000` virker for enheter lagt til fra HA.
+  - Svaret har 5 byte etter taggen. De to siste var `00 00`, og betydningen er ukjent.
+- Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
+
+### 6.2 Plan
 
 Bruk en `DimmerGen4` eller `MicroPillGen4` for alt unntatt test 1 og 2. Trim kan også testes på en eldre
 `MicroPill`. Skriv adressen little-endian: enheten `CA67` blir `67ca`. Bytt `e7a4` med `0000` hvis enheten

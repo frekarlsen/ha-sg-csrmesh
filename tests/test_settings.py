@@ -91,3 +91,13 @@ def test_parse_ack():
     assert ack == s.Ack(s.OP_TRIM_SET, b"\x03")
     assert s.parse_ack(_msg(0xCA67, "0080ff08e7a448")).opcode == s.OP_FADING
     assert s.parse_ack(_msg(0xCA67, "0080ff05e7a40164")) is None
+
+
+def test_parse_trim_real_answer():
+    """Captured 17.10.2026 from 9640 (joined by HA, tag 00 00) after 4096ff2a0000."""
+    msg = _msg(0x9640, "0080ff2b00003554320000")
+    assert msg.tag == protocol.NO_TAG
+    lv = s.parse_trim(msg)
+    assert lv == s.TrimLevels(53, 84, 50)
+    assert (lv.min_percent, lv.startup_percent, lv.max_percent) == (10.0, 30.0, 100.0)
+    assert s.trim_get_cmd(0x9640, tag=protocol.NO_TAG).hex() == "4096ff2a0000"

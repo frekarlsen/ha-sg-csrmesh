@@ -1,8 +1,9 @@
 """Device settings for SG Gen1 (CSRmesh): trim, fading, push-button input, mode.
 
 Status: mapped from the SG Smart app's own code paths for CSR devices (method
-in docs/gen1-protocol.md). NOT verified on hardware yet. Nothing in the
-integration sends these until a hardware test has confirmed them.
+in docs/gen1-protocol.md). Verified on hardware: reading trim (FF2A -> FF2B,
+index format, tag 00 00 on a device joined by HA). Everything else is
+unverified, and the integration sends none of it until a test confirms it.
 
 Every SG extension message is ``<dst LE> <opcode BE> <tag> <data...>`` (see
 ``protocol.py``). The tag is the device's SG "location id" (E7 A4 on devices
@@ -12,7 +13,7 @@ message with another tag, and answers start with the same tag.
 Commands (data after the tag):
 
     FF29  <kind> <index>        set trim; kind 1 min, 2 start-up, 3 max
-    FF2A                        read trim -> FF2B <min> <start> <max> <?>
+    FF2A                        read trim -> FF2B <min> <start> <max> 00 00
     FF39  <mode>                0 dimming, 1 tunable white, 2 on/off,
                                 3 countdown, 4 RGB, 5 RGBW, 6 pulse
     FF47  <option>              external push-button input: 0 normal, 1 sensor
