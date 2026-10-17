@@ -111,3 +111,13 @@ def test_real_acks():
     assert fading == s.Ack(s.OP_FADING, b"\x1e")
     assert s.fading_cmd(0x9640, 30, tag=protocol.NO_TAG).hex() == "4096ff4800001e00"
     assert s.trim_set_cmd(0x9640, s.TrimKind.MAX, 8, tag=protocol.NO_TAG).hex() == "4096ff2900000308"
+
+
+def test_real_firmware_and_push_switch():
+    """Captured 17.10.2026 from 9640."""
+    assert s.parse_firmware(_msg(0x9640, "0080ff5f000001020001020001")) == "1.2.0/1.2.0/1"
+    assert s.parse_firmware(_msg(0x9640, "0080ff5f0000010200010200")) is None
+    assert s.parse_ack(_msg(0x9640, "0080ff0800004700")) == s.Ack(s.OP_PUSH_SWITCH, b"\x00")
+    assert s.parse_ack(_msg(0x9640, "0080ff0800004800")) == s.Ack(s.OP_FADING, b"\x00")
+    assert s.fading_cmd(0x9640, 0, tag=protocol.NO_TAG).hex() == "4096ff4800000000"
+    assert s.push_switch_cmd(0x9640, False, tag=protocol.NO_TAG).hex() == "4096ff47000000"

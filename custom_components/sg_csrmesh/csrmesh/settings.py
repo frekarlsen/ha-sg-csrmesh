@@ -3,7 +3,8 @@
 Status: mapped from the SG Smart app's own code paths for CSR devices (method
 in docs/gen1-protocol.md). Verified on hardware: reading and setting trim (FF2A ->
 FF2B, FF29 -> FF08 29 <kind>, index format, tag 00 00 on a device joined by HA)
-and fading (FF48 -> FF08 48 <fading>). Everything else is
+fading (FF48 -> FF08 48 <fading>), push-button ack (FF47 -> FF08 47 <opt>)
+and firmware (FF5E -> FF5F). Everything else is
 unverified, and the integration sends none of it until a test confirms it.
 
 Every SG extension message is ``<dst LE> <opcode BE> <tag> <data...>`` (see
@@ -18,9 +19,10 @@ Commands (data after the tag):
     FF39  <mode>                0 dimming, 1 tunable white, 2 on/off,
                                 3 countdown, 4 RGB, 5 RGBW, 6 pulse
     FF47  <option>              external push-button input: 0 normal, 1 sensor
-    FF48  <fading> <speed>      fading in 1/10 s (as 3.0: 5, 10, 20, 30);
-                                dimming speed 0 normal, 1 fast
-    FF5E                        read firmware -> FF5F
+    FF48  <fading> <speed>      start-up fading in 1/10 s (app: 0 off, 5, 10,
+                                20, 30); dimming speed 0 normal, 1 fast
+    FF5E                        read firmware -> FF5F <a b c d e f g>,
+                                shown by the app as a.b.c/d.e.f/g
 
 The device acknowledges a setting with FF08 ``<tag> <low byte of the opcode>
 ...``; for trim the next byte repeats the kind.
@@ -64,7 +66,7 @@ class Mode(IntEnum):
     PULSE = 6
 
 
-FADING_TENTHS = (5, 10, 20, 30)  # what the app offers on 3.0; assumed the same
+FADING_TENTHS = (0, 5, 10, 20, 30)  # the app's choices (RGBW types: 5 and 30 only)
 
 # The app's level tables for CSR devices (Device.minLevelList / maxLevelList).
 # Index on the air -> percent shown in the app.
@@ -184,3 +186,11 @@ def parse_ack(msg: Message) -> Ack | None:
     if msg.opcode != OP_ACK or not msg.body:
         return None
     return Ack(0xFF00 | msg.body[0], bytes(msg.body[1:]))
+
+
+def parse_firmware(msg: Message) -> str | None:
+    """FF5F <tag> a b c d e f g -> "a.b.c/d.e.f/g" (as the app shows it)."""
+    b = msg.body
+    if msg.opcode != OP_FIRMWARE or len(b) < 7:
+        return None
+    return f"{b[0]}.{b[1]}.{b[2]}/{b[3]}.{b[4]}.{b[5]}/{b[6]}"

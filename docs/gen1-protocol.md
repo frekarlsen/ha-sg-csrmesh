@@ -34,9 +34,9 @@ Alle bytene står etter taggen.
 | Sett trim | `FF29` | `KIND IDX` | KIND `01` min, `02` oppstart, `03` maks. IDX er en **indeks i tabell** (se punkt 3) | `FF08 29 KIND`. **Verifisert** for maks 17.10.2026 |
 | Les trim | `FF2A` | – | | `FF2B MIN START MAKS 00 00` (indekser). **Verifisert** 17.10.2026, se punkt 6.1 |
 | Modus | `FF39` | `MODE` | `00` dimming, `01` TW, `02` av/på, `03` nedtelling, `04` RGB, `05` RGBW, `06` puls | `FF08 39 …` |
-| Ekstern trykkbryter | `FF47` | `OPT` | `00` normal, `01` sensor (**ikke** `01`/`02` som i 3.0) | `FF08 47 …` |
-| Fading + dimmehastighet | `FF48` | `FADE SPEED` | FADE i tideler sekund (som i 3.0: `05`, `0A`, `14`, `1E`). SPEED `00` normal, `01` rask | `FF08 48 FADE`. **Verifisert** 17.10.2026 |
-| Les fastvare | `FF5E` | – | | `FF5F` med versjonen i byte 0–2, 3–5 og 6– (vises som `a.b.c/d.e.f/…`) |
+| Ekstern trykkbryter | `FF47` | `OPT` | `00` normal, `01` sensor (**ikke** `01`/`02` som i 3.0) | `FF08 47 OPT`. Kvittering verifisert 17.10.2026 (for `00`) |
+| Fading + dimmehastighet | `FF48` | `FADE SPEED` | FADE i tideler sekund. Appens valg: `00` av, `05`, `0A`, `14`, `1E` (RGBW-typer: bare `05` og `1E`). SPEED `00` normal, `01` rask | `FF08 48 FADE`. **Verifisert** 17.10.2026 (`1E` og `00`) |
+| Les fastvare | `FF5E` | – | | `FF5F A B C D E F G`. Appen viser `A.B.C/D.E.F/G`. **Verifisert** 17.10.2026 |
 | Bryterknapp → enhet (Gen2-brytere) | `FF13` | `BTN TYPE MÅL_HI MÅL_LO 00 TID` | sendes **til bryteren**. TYPE `00` av/på-par, `07` dimming med én knapp, `08` CCT. MÅL er big-endian | `FF08 13 BTN TYPE`?, se punkt 5 |
 | Bryterknapp → enhet (V1-brytere) | `FF14` | `A B 00 MÅL_HI MÅL_LO 00` | Gammel Smart Switch (type `SmartSwitch`) | – |
 | Nullstill bryterknapp | `FF17` | `BTN X` | | – |
@@ -130,6 +130,13 @@ ukjent, men den har trim, og da er den ikke en eldre `Dimmer`. Lampen var av.
      Første forsøk ble ikke lagt merke til, andre forsøk ble observert tydelig.
   - Fading kan ikke leses tilbake (appen har ingen kommando for det), og den opprinnelige verdien er ukjent.
   - Siden 9640 godtar fading, er den etter appens tabell en Gen3- eller Gen4-type, ikke en eldre `MicroPill`.
+- **Fading av, verifisert.** Sendt `4096ff4800000000`, og svaret var `ff08 0000 48 00`. Påslag fra av
+  til 100 % kom momentant i begge forsøkene. Fading står nå på av, som er appens laveste valg.
+- **Fastvare, verifisert.** Sendt `4096ff5e0000`, og svaret var `ff5f 0000 01 02 00 01 02 00 01`. Appen
+  viser det som `1.2.0/1.2.0/1`. Hva de tre delene betyr, er ukjent. Appen krever minst 7 byte etter
+  taggen.
+- **Trykkbryter normal, kvittert.** Sendt `4096ff47000000`, og svaret var `ff08 0000 47 00`. Kvitteringen
+  gjentar valget. Det er ingen synlig endring, fordi normal trolig var fabrikkverdien.
 - Feil i verktøyet: når to `capture` overlapper, slår den første av loggingen for den andre når den
   avslutter. Rettet i `coordinator.py`.
 - Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
@@ -154,7 +161,7 @@ data:
 | # | Hva | Send | Forvent |
 |---|---|---|---|
 | 1 | Les trim | `67caff2ae7a4` | `ff2b e7a4 MIN START MAKS ..` fra `ca67`. Regn om med tabellen. Fabrikk er trolig ca. 10 % / 30 % / 100 % (indeks 53 / 84 / 50) |
-| 2 | Les fastvare | `67caff5ee7a4` | `ff5f e7a4 …` med minst 8 byte etter taggen |
+| 2 | Les fastvare | `67caff5ee7a4` | `ff5f e7a4 …` med 7 byte etter taggen |
 | 3 | Maks 90 % | `67caff29e7a4032a` | `ff08 e7a4 29 03 …`. Sett lampen til 100 % i HA: den skal lyse svakere. Les trim igjen (test 1): MAKS = `2a` |
 | 3b | Tilbake til 100 % | `67caff29e7a40332` | `ff08 e7a4 29 03 …` |
 | 4 | Fading 3 s (Gen4) | `67caff48e7a41e00` | `ff08 e7a4 48 …`. Slå av, og så på igjen fra et høyt nivå: lyset skal tones inn |
