@@ -1,0 +1,5 @@
+# Python 3.14: uv venv -p 3.14 && uv pip install -r requirements-test.txt
+pytest-homeassistant-custom-component==0.13.346
+recsrmesh==0.3.0
+pycryptodomex
+ruff==0.16.0

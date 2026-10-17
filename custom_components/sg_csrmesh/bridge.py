@@ -19,7 +19,6 @@ from bleak_retry_connector import (
     close_stale_connections_by_address,
     establish_connection,
 )
-
 from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant, callback
 

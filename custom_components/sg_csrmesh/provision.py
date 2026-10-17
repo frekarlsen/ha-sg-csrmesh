@@ -13,9 +13,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from dataclasses import dataclass
-
 from collections import deque
+from dataclasses import dataclass
 
 from recsrmesh.ble import AssociationStateMachine, _process_discovery_packet
 from recsrmesh.crypto import (

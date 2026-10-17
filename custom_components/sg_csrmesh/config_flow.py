@@ -16,7 +16,6 @@ import contextlib
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -31,9 +30,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
-    SelectOptionDict,
     SelectSelectorMode,
     TextSelector,
 )
@@ -66,7 +65,6 @@ from .migrate import (
 CONF_AREA = "area_id"
 CONF_HOMEKIT = "homekit_device"
 CONF_HIDE_HOMEKIT = "hide_homekit"
-KNOWN_OPTIONS = (CONF_DEVICES, CONF_POLL_INTERVAL, CONF_MIN_LEVEL)
 
 
 def _describe(addr: int, body_hex: str) -> str:
@@ -137,7 +135,9 @@ class SGOptionsFlow(OptionsFlowWithReload):
     _error = ""
 
     def _opts(self) -> dict[str, Any]:
-        opts = {k: v for k, v in self.config_entry.options.items() if k in KNOWN_OPTIONS}
+        # Keep every existing option: a fixed key list silently deletes
+        # anything added later (the 3.0 integration lost settings that way).
+        opts = dict(self.config_entry.options)
         opts[CONF_DEVICES] = {
             k: dict(v) for k, v in self.config_entry.options.get(CONF_DEVICES, {}).items()
         }
