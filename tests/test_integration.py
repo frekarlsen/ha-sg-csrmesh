@@ -196,3 +196,30 @@ def test_version_matches_pyproject():
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
     pyproject = tomllib.loads((COMPONENT.parents[1] / "pyproject.toml").read_text())
     assert manifest["version"] == pyproject["project"]["version"]
+
+
+async def test_overlapping_captures_keep_logging(hass: HomeAssistant, send):
+    """A capture that ends must not switch off one that is still running."""
+    import asyncio
+
+    entry = _entry()
+    await _setup(hass, entry)
+    coord = entry.runtime_data
+    release = {1: asyncio.Event(), 2: asyncio.Event()}
+    calls = iter((1, 2))
+
+    async def fake_listen(_seconds):
+        await release[next(calls)].wait()
+
+    with patch("custom_components.sg_csrmesh.bridge.MeshLink.listen", side_effect=fake_listen):
+        first = hass.async_create_task(coord.async_capture(10))
+        await asyncio.sleep(0)
+        second = hass.async_create_task(coord.async_capture(10))
+        await asyncio.sleep(0)
+        release[1].set()
+        await first
+        assert coord._capturing  # the second capture is still running
+        release[2].set()
+        await second
+        assert not coord._capturing
+    assert await hass.config_entries.async_unload(entry.entry_id)

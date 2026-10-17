@@ -31,7 +31,7 @@ Alle bytene står etter taggen.
 
 | Innstilling | Opkode | Data | Verdier | Svar |
 |---|---|---|---|---|
-| Sett trim | `FF29` | `KIND IDX` | KIND `01` min, `02` oppstart, `03` maks. IDX er en **indeks i tabell** (se punkt 3) | `FF08 29 KIND …` |
+| Sett trim | `FF29` | `KIND IDX` | KIND `01` min, `02` oppstart, `03` maks. IDX er en **indeks i tabell** (se punkt 3) | `FF08 29 KIND`. **Verifisert** for maks 17.10.2026 |
 | Les trim | `FF2A` | – | | `FF2B MIN START MAKS 00 00` (indekser). **Verifisert** 17.10.2026, se punkt 6.1 |
 | Modus | `FF39` | `MODE` | `00` dimming, `01` TW, `02` av/på, `03` nedtelling, `04` RGB, `05` RGBW, `06` puls | `FF08 39 …` |
 | Ekstern trykkbryter | `FF47` | `OPT` | `00` normal, `01` sensor (**ikke** `01`/`02` som i 3.0) | `FF08 47 …` |
@@ -115,6 +115,15 @@ ukjent, men den har trim, og da er den ikke en eldre `Dimmer`. Lampen var av.
   - Tolket som halv-prosent ville det blitt 26,5 / 42 / 50 %. Da ville oppstart ligget over appens grense på
     40 %. **Indeksformatet er dermed bekreftet**, og taggen `0000` virker for enheter lagt til fra HA.
   - Svaret har 5 byte etter taggen. De to siste var `00 00`, og betydningen er ukjent.
+- **Sett maks 50 %, verifisert.** Lampen sto på 100 %.
+  1. Sendt `4096ff2900000308`, to ganger. Svaret var `9640 → 0080 ff08 0000 29 03` på begge.
+     Kvitteringen er `29` (kommandoen) og `03` (maks). Den har ingen statusbyte.
+  2. Lampen gikk **med en gang** til omtrent halv styrke, uten noen ny nivåkommando.
+  3. Tilbakelest: `ff2b 0000 35 54 08 00 00`, altså maks-indeks 8 = 50 %. Min og oppstart var uendret.
+  4. Satt tilbake med `4096ff2900000332`. Lampen gikk tilbake til full styrke, og tilbakelest var
+     `35 54 32 00 00`. Dimmeren står igjen på fabrikkverdiene.
+- Feil i verktøyet: når to `capture` overlapper, slår den første av loggingen for den andre når den
+  avslutter. Rettet i `coordinator.py`.
 - Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
 
 ### 6.2 Plan

@@ -165,6 +165,7 @@ class MeshCoordinator:
         self.decoded_count = 0
         self.raw_count = 0
         self._capturing = False
+        self._captures = 0  # running capture calls; they may overlap
         # Random start: the SG gateway counts its transaction ids from 1 too,
         # and a device may ignore a command that reuses the id it just saw.
         self._tid = secrets.randbelow(256)
@@ -605,6 +606,9 @@ class MeshCoordinator:
         Raw chunks and decrypted frames both go into the diagnostics buffer;
         decrypted frames are also logged and fired as ``sg_csrmesh_frame``.
         """
+        # Captures may overlap (a new one started before the last ended); only
+        # the last one to finish switches capturing off again.
+        self._captures += 1
         self._capturing = True
         self.raw_count = 0
         self.decoded_count = 0
@@ -615,8 +619,10 @@ class MeshCoordinator:
         except Exception as err:  # noqa: BLE001 - surface any link failure to the UI
             raise HomeAssistantError(f"capture failed: {err}") from err
         finally:
-            self._capturing = False
-            self.link.set_raw_sink(None)
+            self._captures -= 1
+            if self._captures == 0:
+                self._capturing = False
+                self.link.set_raw_sink(None)
             _LOGGER.info(
                 "capture done: %s raw notifications, %s decrypted frames",
                 self.raw_count, self.decoded_count,

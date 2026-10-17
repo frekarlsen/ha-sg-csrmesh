@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `capture` calls that overlap no longer cut each other short (the first one to end used to switch
+  logging off for the one still running).
+- Trim read and set (max) verified on hardware; see docs/gen1-protocol.md 6.1.
 - Options flow keeps every existing option when saving (it used to copy a fixed list of keys, which
   would have deleted any option added later).
 - `csrmesh/settings.py`: builders and parsers for trim (`FF29`/`FF2A`/`FF2B`), mode (`FF39`),
