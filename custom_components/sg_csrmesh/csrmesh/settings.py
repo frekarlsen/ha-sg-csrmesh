@@ -1,8 +1,9 @@
 """Device settings for SG Gen1 (CSRmesh): trim, fading, push-button input, mode.
 
 Status: mapped from the SG Smart app's own code paths for CSR devices (method
-in docs/gen1-protocol.md). Verified on hardware: reading trim (FF2A -> FF2B,
-index format, tag 00 00 on a device joined by HA). Everything else is
+in docs/gen1-protocol.md). Verified on hardware: reading and setting trim (FF2A ->
+FF2B, FF29 -> FF08 29 <kind>, index format, tag 00 00 on a device joined by HA)
+and fading (FF48 -> FF08 48 <fading>). Everything else is
 unverified, and the integration sends none of it until a test confirms it.
 
 Every SG extension message is ``<dst LE> <opcode BE> <tag> <data...>`` (see

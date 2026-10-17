@@ -101,3 +101,13 @@ def test_parse_trim_real_answer():
     assert lv == s.TrimLevels(53, 84, 50)
     assert (lv.min_percent, lv.startup_percent, lv.max_percent) == (10.0, 30.0, 100.0)
     assert s.trim_get_cmd(0x9640, tag=protocol.NO_TAG).hex() == "4096ff2a0000"
+
+
+def test_real_acks():
+    """Captured 17.10.2026 from 9640 after FF29 03 08 and FF48 1e 00."""
+    trim = s.parse_ack(_msg(0x9640, "0080ff0800002903"))
+    assert trim == s.Ack(s.OP_TRIM_SET, bytes([s.TrimKind.MAX]))
+    fading = s.parse_ack(_msg(0x9640, "0080ff080000481e"))
+    assert fading == s.Ack(s.OP_FADING, b"\x1e")
+    assert s.fading_cmd(0x9640, 30, tag=protocol.NO_TAG).hex() == "4096ff4800001e00"
+    assert s.trim_set_cmd(0x9640, s.TrimKind.MAX, 8, tag=protocol.NO_TAG).hex() == "4096ff2900000308"

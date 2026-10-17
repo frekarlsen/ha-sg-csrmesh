@@ -35,7 +35,7 @@ Alle bytene står etter taggen.
 | Les trim | `FF2A` | – | | `FF2B MIN START MAKS 00 00` (indekser). **Verifisert** 17.10.2026, se punkt 6.1 |
 | Modus | `FF39` | `MODE` | `00` dimming, `01` TW, `02` av/på, `03` nedtelling, `04` RGB, `05` RGBW, `06` puls | `FF08 39 …` |
 | Ekstern trykkbryter | `FF47` | `OPT` | `00` normal, `01` sensor (**ikke** `01`/`02` som i 3.0) | `FF08 47 …` |
-| Fading + dimmehastighet | `FF48` | `FADE SPEED` | FADE i tideler sekund (som i 3.0: `05`, `0A`, `14`, `1E`). SPEED `00` normal, `01` rask | `FF08 48 …` |
+| Fading + dimmehastighet | `FF48` | `FADE SPEED` | FADE i tideler sekund (som i 3.0: `05`, `0A`, `14`, `1E`). SPEED `00` normal, `01` rask | `FF08 48 FADE`. **Verifisert** 17.10.2026 |
 | Les fastvare | `FF5E` | – | | `FF5F` med versjonen i byte 0–2, 3–5 og 6– (vises som `a.b.c/d.e.f/…`) |
 | Bryterknapp → enhet (Gen2-brytere) | `FF13` | `BTN TYPE MÅL_HI MÅL_LO 00 TID` | sendes **til bryteren**. TYPE `00` av/på-par, `07` dimming med én knapp, `08` CCT. MÅL er big-endian | `FF08 13 BTN TYPE`?, se punkt 5 |
 | Bryterknapp → enhet (V1-brytere) | `FF14` | `A B 00 MÅL_HI MÅL_LO 00` | Gammel Smart Switch (type `SmartSwitch`) | – |
@@ -122,6 +122,14 @@ ukjent, men den har trim, og da er den ikke en eldre `Dimmer`. Lampen var av.
   3. Tilbakelest: `ff2b 0000 35 54 08 00 00`, altså maks-indeks 8 = 50 %. Min og oppstart var uendret.
   4. Satt tilbake med `4096ff2900000332`. Lampen gikk tilbake til full styrke, og tilbakelest var
      `35 54 32 00 00`. Dimmeren står igjen på fabrikkverdiene.
+- **Fading 3 s, verifisert.**
+  1. Sendt `4096ff4800001e00`, to ganger. Svaret var `9640 → 0080 ff08 0000 48 1e` på begge.
+     Kvitteringen gjentar fading-verdien.
+  2. Av-slag er fortsatt momentant.
+  3. Påslag fra av til 100 % toner gradvis opp. Fadingen gjelder bare påslag («Start Up Fading»).
+     Første forsøk ble ikke lagt merke til, andre forsøk ble observert tydelig.
+  - Fading kan ikke leses tilbake (appen har ingen kommando for det), og den opprinnelige verdien er ukjent.
+  - Siden 9640 godtar fading, er den etter appens tabell en Gen3- eller Gen4-type, ikke en eldre `MicroPill`.
 - Feil i verktøyet: når to `capture` overlapper, slår den første av loggingen for den andre når den
   avslutter. Rettet i `coordinator.py`.
 - Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
