@@ -165,6 +165,38 @@ automasjonen var slått av under testen.
     og tilstand `0x10`. N er bryterens egen teller. Den kan gi batterinivået i HA.
 - Neste steg: fang trafikken mens SG-appen konfigurerer en knapp på en bryter som er på gatewayen
   (test 6). Gatewayen har ni `SmartSwitchV2` og én `SmartSwitchGen4` («Smart Switch Kjeller»).
+**19.10.2026: SG-appen konfigurerer en bryter, fanget. Verifisert.**
+Bryteren er Smart Switch Soverom `99bc` (SmartSwitchV2, fastvare 1.9, tag `e7a4`). Høyre knapp ble
+nullstilt og paret på nytt med Lys Nattbord `89e0` (MicroPillGen4). Tidene er når rammene kom fram
+til HA, regnet fra bryterens første ramme.
+
+| Tid | Retning | Ramme | Betyr |
+|---|---|---|---|
+| 0,0 s | 99bc → 8000 | `ff15 e7a4 03 00 09` | trykk, knapp 3 |
+| +0,4 s | 99bc → 8001 | `ff0a e7a4 ff 64` | bryterens egen kommando (ukjent betydning) |
+| +0,7 s | 8000 → 99bc | `ff12 e7a4 01 01` | hold deg våken, TID 01 |
+| +0,6/0,8 s | 99bc → 8000 | `ff08 e7a4 12` | kvittering |
+| +1,0 s | 8000 → 99bc | `ff17 e7a4 03 02` | nullstill knapp 3, TID 02 |
+| +1,0/1,2 s | 99bc → 8000 | `ff08 e7a4 17 03` | kvittering med knappen |
+| +1,2 s | 8000 → 99bc | `ff13 e7a4 03 00 89e0 00 03` | knapp 3 → 89e0, type 00, TID 03 |
+| +1,7 s | 99bc → 8000 | `ff08 e7a4 13 03 00` | kvittering med knapp og type |
+| +1,7 s | 8000 → 99bc | `ff12 e7a4 00 04` | sov, TID 04 |
+| +1,8 s | 99bc → 8000 | `ff08 e7a4 12` | kvittering |
+| +3,4 s | 99bc → 89e0 | `ff0a e7a4 00 64` | bryteren styrer Lys Nattbord direkte |
+
+- **`FF13`-formatet er altså riktig**, og det samme som HA sendte til `c3e4`. Appen gjør hele
+  sekvensen (våken, nullstill, sett, sov) innen 1,7 s, mens bryteren er våken.
+- HA brukte 1,2–1,5 s per melding (to kopier og 0,3 s pause, og hver GATT-skriving via proxy tar
+  ca. 0,4 s). `FF12` og `FF13` kom derfor aldri i samme vindu med riktig tempo, og `FF17` ble aldri
+  sendt. Fra 0.6.3rc1 tar `send_on_press` `repeats: 1, gap: 0`.
+- Én paring er **én** `FF13` med type `00` for én knapp. Det finnes ikke noe par-oppsett på
+  protokollnivå for denne bryteren.
+- `FF0A <tag> A B` er bryterens styringskommando. Den sendes direkte til målet (og til `8001`).
+  `A`/`B` er ikke kartlagt (`ff 64` og `00 64` ble sett).
+- `FF15` fra `99bc` har kroppen `03 00 09`, mens `c3e4` sender `BTN 01 01`. Forskjellen er ikke forstått.
+- Under fangsten sendte telefonappen også `0000 ff10 0000` (navnespørring til alle med tag `0000`)
+  hvert 4. sekund. `9640` svarte `ff11 0000 "GD8352" c3`, altså sitt navn i ASCII.
+
 - Feil i verktøyet: når to `capture` overlapper, slår den første av loggingen for den andre når den
   avslutter. Rettet i `coordinator.py`.
 - Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
