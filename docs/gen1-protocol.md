@@ -322,8 +322,24 @@ SG-appen for en enhet som fortsatt er på gatewayen mens fangsten går.
 
 ## 7. Åpent
 
-- Status-byte i `FF08` (godtatt eller avvist), og hva byte 3 og videre i `FF2B` betyr.
-- Om CSR-enhetene sender svar uoppfordret, slik 3.0-pillen sender sin egen status før svaret.
-- Knappenummerering og TYPE i `FF13`, og svarformatet.
-- Ingen sjekket ennå: HeatReg (`ThermostatGen3`), produktgjenkjenning, og lesing av bryterens egen
-  paringstabell.
+- `FF08` har ingen status-byte for godtatt eller avvist på CSR. Integrasjonen regner kvittering som
+  godtatt og stillhet som «send igjen». Byte 3 og videre i `FF2B` er fortsatt ukjent.
+- Én stor vippe (app-valget `singleButton`): integrasjonen sender `FF17`/`FF13` for knapp 0 og 3, og
+  regner topp som knapp 0+3 og bunn som 1+2 i `FF15`. Ikke testet på maskinvare ennå (test i 0.7.0rc1).
+- HeatReg: sensormodus (rom/gulv) står ikke i statusen. Integrasjonen viser gulvtemperaturen, som
+  gatewayen. Betydningen av flaggbit 4 og 7, og av `FF5C`, er ikke kartlagt. Ingen `FF08` for `FF42`.
+- Modellen kan ikke leses over meshen. Annonseringsnavnet (`@GDxxxx` …) kan kanskje gi typen, men det er
+  bare sett for én enhet (`GD8352` = `9640`, trolig `DimmerGen4`).
+- Bryterens egen paringstabell kan ikke leses. HA fører sin egen oversikt.
+
+## 8. I integrasjonen (0.7.0rc1)
+
+| Funksjon | Kommandoer | Verifisert |
+|---|---|---|
+| Min / oppstart / maks, lest og satt | `FF2A`/`FF2B`, `FF29` | ✓ (`9640`, `89e0`) |
+| Fading og dimmehastighet | `FF48` | ✓ fading, hastighet ikke observert |
+| Trykkbryterinngang | `FF47` | kvittert |
+| Fastvare på enhetssiden | `FF5E`/`FF5F`, HeatReg fra `FF05` | ✓ |
+| Koble / fjerne bryterknapp | `FF12`, `FF17`, `FF13` | ✓ (`c3e4`), stor vippe ikke testet |
+| Batteri på bryter | `83 01` | ✓ |
+| HeatReg | `FF04`/`FF05`, `FF3C`/`FF3D`, `FF3E`, `FF42` | ✓ (`f03f`) |
