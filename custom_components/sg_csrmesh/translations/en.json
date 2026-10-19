@@ -161,7 +161,7 @@
       },
       "pair_press": {
         "title": "Press {switch}",
-        "description": "Click Submit, then briefly press any button on the switch. It only listens for a couple of seconds after a press. Whatever does not get through is sent at the next press: press again after a few seconds if it does not finish."
+        "description": "Click Submit, then briefly press any button on the switch. It only listens for about a second after a press, so it often takes two presses: wait a couple of seconds between them. Whatever is not confirmed is sent again at the next press."
       }
     },
     "error": {
@@ -176,7 +176,7 @@
       "scan": "Searching for new devices …",
       "associate": "Joining {name} to the network (key exchange, up to a minute) …",
       "reset": "Resetting {name} …",
-      "pair": "Waiting for a press on {switch} … Press it briefly. Not finished after a few seconds? Press once more."
+      "pair": "Waiting for {switch} … Press any button briefly. It often takes two presses: wait a couple of seconds after each until this finishes."
     },
     "abort": {
       "not_loaded": "The integration is not loaded.",

@@ -138,7 +138,7 @@ async def test_big_rocker_configures_both_buttons_across_presses(hass: HomeAssis
     ops = [s[4:8] + s[12:14] for s in _to_switch(send)]
     assert ops == [
         "ff1201", "ff1700", "ff1300", "ff1703", "ff1303", "ff1200",  # first press
-        "ff1201", "ff1703", "ff1303", "ff1200",                      # second: only button 3
+        "ff1201", "ff1303", "ff1200",  # second: button 3 was cleared already, only the set
     ]
 
 
@@ -164,3 +164,29 @@ async def test_panel_change_needs_pairings_removed(hass: HomeAssistant, send):
     assert r["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["devices"]["c3e4"]["model"] == "SmartSwitchGen4"
     assert entry.options["devices"]["c3e4"]["pairs"] == {"left": "9640"}
+
+
+async def test_lost_clear_ack_does_not_hold_up_the_pairing(hass: HomeAssistant, send):
+    """19.10.2026: the switch acknowledged FF13 but the FF17 ack never came.
+
+    FF13 is only accepted on a cleared button, so its ack is enough.
+    """
+    entry = make_entry({"c3e4": SWITCH, "9640": LIGHT})
+    await setup(hass, entry)
+    coord = entry.runtime_data
+    send.side_effect = answering(
+        coord, lambda p: [] if p[2:4] == b"\xff\x17" else _switch_acks(p)
+    )
+    r = await _menu(hass, entry, "pair_switch")
+    r = await hass.config_entries.options.async_configure(
+        r["flow_id"], {"action": "pair", "rocker": "right", "target": "9640"}
+    )
+    with patch("custom_components.sg_csrmesh.coordinator.SWITCH_ACK_SETTLE", 0.01):
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {})
+        await asyncio.sleep(0)
+        inject(coord, 0xC3E4, "0080ff150000030101")
+        await hass.async_block_till_done(wait_background_tasks=True)
+        r = await hass.config_entries.options.async_configure(r["flow_id"])
+    assert r["reason"] == "paired"
+    assert entry.options["devices"]["c3e4"]["pairs"] == {"right": "9640"}
+    assert len([s for s in _to_switch(send) if s[4:8] == "ff13"]) == 1  # one press was enough

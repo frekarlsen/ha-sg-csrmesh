@@ -257,6 +257,27 @@ Ved trykk øverst høyre (11:49:07, bryteren sendte fortsatt `ff03` til `89e0`):
   avslutter. Rettet i `coordinator.py`.
 - Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
 
+**19.10.2026: paring fra dialogen i 0.7.0rc1, og når `FF13` godtas.** `c3e4`, med sendinger fra
+`send_on_press` (`repeats: 1, gap: 0`) og trykk på bryteren.
+
+- **Dialogen (rc1):** Første runde for venstre vippe: `FF12 01` (+0,48 s), `FF17 00` (+0,72 s),
+  `FF13 00 → 9640` (+1,20 s). `FF13` ble kvittert (`ff08 0000 13 00 00`, fire kopier), men det kom ingen
+  kvittering for `FF17`. rc1 krevde begge og sendte på nytt ved hvert trykk. I de neste rundene kom `FF13`
+  1,4–2,0 s etter trykket, og da ble ingenting kvittert. Bryteren styrte likevel lampen etter første
+  runde, men dialogen ble aldri ferdig.
+- **`FF13` på en tom knapp, uten `FF17`:** `FF12 01` (+0,48 s), `FF13 03 → 9640` (+0,96 s) → `ff08 0000 13
+  03 00`. Neste trykk øverst til høyre tente Lys Vaskerom. **Virker.**
+- **`FF13` på en knapp som allerede er koblet, uten `FF17`:** `FF13 03 → 89e0` (+1,08 s) → ingen kvittering.
+  Nederst til høyre slukket fortsatt Lys Vaskerom, så den gamle koblingen sto. **Bryteren tar bare imot
+  `FF13` på en tom knapp.** Derfor nullstiller appen først.
+- **`FF17` på en koblet knapp:** `FF17 03` (+0,96 s) → `ff08 0000 17 03`. **`FF17` på en tom knapp:**
+  også kvittert (`17 03`). Øverst til høyre gjorde deretter ingenting.
+- **Vinduet:** Kommandoer kvitteres opp til ca. +1,2 s etter at HA ser trykket. Hver GATT-skriving
+  via proxyen tok 0,36–0,6 s denne dagen.
+- **Følger for 0.7.0rc2:** En kobling er ferdig når `FF13` er kvittert. Siden `FF13` bare godtas på en tom
+  knapp, beviser det også nullstillingen, selv om `FF17`-kvitteringen gikk tapt. Er bare `FF17`
+  kvittert, sendes bare `FF13` ved neste trykk. Da kommer den tidlig nok (+0,96 s).
+
 **19.10.2026: HeatReg Smart (`ThermostatGen3`), verifisert.** Tre termostater på gatewayen (tag
 `e7a4`): `808c` Varmekabler Bad (fastvare 52.0), `8505` Varmekabler Kjellerstue (53.2) og `f03f`
 Varmekabler Yttergang (53.2). Kryssjekket mot verdiene gatewayen viser i HomeKit.
@@ -332,7 +353,7 @@ SG-appen for en enhet som fortsatt er på gatewayen mens fangsten går.
   bare sett for én enhet (`GD8352` = `9640`, trolig `DimmerGen4`).
 - Bryterens egen paringstabell kan ikke leses. HA fører sin egen oversikt.
 
-## 8. I integrasjonen (0.7.0rc1)
+## 8. I integrasjonen (0.7.0rc2)
 
 | Funksjon | Kommandoer | Verifisert |
 |---|---|---|
@@ -340,6 +361,6 @@ SG-appen for en enhet som fortsatt er på gatewayen mens fangsten går.
 | Fading og dimmehastighet | `FF48` | ✓ fading, hastighet ikke observert |
 | Trykkbryterinngang | `FF47` | kvittert |
 | Fastvare på enhetssiden | `FF5E`/`FF5F`, HeatReg fra `FF05` | ✓ |
-| Koble / fjerne bryterknapp | `FF12`, `FF17`, `FF13` | ✓ (`c3e4`), stor vippe ikke testet |
+| Koble / fjerne bryterknapp | `FF12`, `FF17`, `FF13` | ✓ (`c3e4`), dialogen rettet i rc2, stor vippe ikke testet |
 | Batteri på bryter | `83 01` | ✓ |
 | HeatReg | `FF04`/`FF05`, `FF3C`/`FF3D`, `FF3E`, `FF42` | ✓ (`f03f`) |

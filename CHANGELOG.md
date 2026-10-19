@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0rc2 – 2026-10-19
+
+- Pairing dialog: a rocker is done when the switch acknowledges the pairing (FF13). It only accepts
+  FF13 on a cleared button, so that also proves the clear, even when the clear's acknowledgement is
+  lost (seen in rc1: the switch was paired after the first press, but the dialog kept asking for
+  presses). If only the clear got through, the next press sends only the pairing, early enough for
+  the switch's ~1 s window. The dialog says it often takes two presses.
+- Devices still unknown after a start are asked again after 20, 60 and 150 s (the first poll goes out
+  while the link connects, and its answers can be lost).
+- Device registry lookups no longer use the deprecated `async_get_device`.
+
 ## 0.7.0rc1 – 2026-10-19
 
 - **Model at setup.** Adding a device asks for its SG model; a device moved from the gateway takes it from

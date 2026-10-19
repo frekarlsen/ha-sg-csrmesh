@@ -955,11 +955,15 @@ class MeshCoordinator:
                                      timeout: float = SWITCH_TIMEOUT) -> bool:
         """Configure a battery switch while it is awake after a press.
 
-        Each press sends: wake (FF12 01), every unfinished unit, sleep (FF12
-        00), back to back as the SG app does (each GATT write through a proxy
-        takes ~0.4 s and the switch listens for ~2 s). A unit is done when
-        all its commands were acknowledged; what is left goes out on the next
-        press. True when every unit is done, False if no press came in time.
+        Each press sends: wake (FF12 01), what is left of every unit, sleep
+        (FF12 00), back to back as the SG app does. Each GATT write through a
+        proxy takes 0.4-0.6 s and the switch only listens ~1.2 s after the
+        wake, so a unit may need two presses. A unit is done when its last
+        command is acknowledged; a command acknowledged before that is not
+        sent again. Acknowledgements get lost now and then, which is why only
+        the last one counts (verified 19.10.2026: the switch accepts FF13 only
+        on a cleared button, so an FF13 acknowledgement proves the clear too).
+        True when every unit is done, False if no press came in time.
         """
         tag = self._tag(switch_id)
         pending = list(units)
@@ -993,8 +997,8 @@ class MeshCoordinator:
                 await self.async_send_raw(messages, gap=0, repeats=1, t0=t0)
                 await asyncio.sleep(SWITCH_ACK_SETTLE)
                 pending = [
-                    unit for unit in pending
-                    if not all(any(step.match(a) for a in acks) for step in unit)
+                    left for unit in pending
+                    if (left := self._unit_left(unit, acks))
                 ]
                 if pending:
                     _LOGGER.info(
@@ -1004,6 +1008,13 @@ class MeshCoordinator:
             return True
         finally:
             remove()
+
+    @staticmethod
+    def _unit_left(unit: list[SwitchStep], acks: list[Message]) -> list[SwitchStep]:
+        """What of a unit still has to be sent after a round."""
+        if any(unit[-1].match(a) for a in acks):
+            return []
+        return [step for step in unit[:-1] if not any(step.match(a) for a in acks)] + [unit[-1]]
 
     # --- developer tools --------------------------------------------------
 

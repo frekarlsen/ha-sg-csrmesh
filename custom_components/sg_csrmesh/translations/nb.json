@@ -161,7 +161,7 @@
       },
       "pair_press": {
         "title": "Trykk på {switch}",
-        "description": "Trykk Send, og trykk så kort på en knapp på bryteren. Den hører bare etter i et par sekunder etter et trykk. Det som ikke kommer fram, sendes ved neste trykk: trykk igjen etter noen sekunder hvis det ikke blir ferdig."
+        "description": "Trykk Send, og trykk så kort på en knapp på bryteren. Den hører bare etter omtrent et sekund etter et trykk, så det trengs ofte to trykk: vent et par sekunder mellom dem. Det som ikke er bekreftet, sendes igjen ved neste trykk."
       }
     },
     "error": {
@@ -176,7 +176,7 @@
       "scan": "Søker etter nye enheter …",
       "associate": "Melder {name} inn i nettverket (nøkkelutveksling, opptil ett minutt) …",
       "reset": "Tilbakestiller {name} …",
-      "pair": "Venter på et trykk på {switch} … Trykk kort på bryteren. Ikke ferdig etter noen sekunder? Trykk én gang til."
+      "pair": "Venter på {switch} … Trykk kort på en knapp. Det trengs ofte to trykk: vent et par sekunder etter hvert trykk til dette er ferdig."
     },
     "abort": {
       "not_loaded": "Integrasjonen er ikke lastet.",
