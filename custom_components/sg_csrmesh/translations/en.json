@@ -226,6 +226,14 @@
         "timeout": {
           "name": "Timeout",
           "description": "How long to wait for a press."
+        },
+        "repeats": {
+          "name": "Copies",
+          "description": "How many times each message is sent. Use 1 for a configuration sequence."
+        },
+        "gap": {
+          "name": "Pause",
+          "description": "Pause between messages. Use 0 for a configuration sequence."
         }
       }
     }

@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.6.3rc1 – 2026-10-19
+
+- `send_on_press` takes `repeats` and `gap`. With `repeats: 1, gap: 0` a switch configuration
+  (wake, clear, set, sleep) fits in the switch's ~2 s wake window, as the SG app does it. No pause
+  after the last message, and the log shows each message's time after the press.
 
 - `capture` calls that overlap no longer cut each other short (the first one to end used to switch
   logging off for the one still running).

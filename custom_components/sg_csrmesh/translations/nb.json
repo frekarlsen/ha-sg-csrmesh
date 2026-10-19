@@ -226,6 +226,14 @@
         "timeout": {
           "name": "Timeout",
           "description": "How long to wait for a press."
+        },
+        "repeats": {
+          "name": "Kopier",
+          "description": "Hvor mange ganger hver melding sendes. Bruk 1 for en oppsettsekvens."
+        },
+        "gap": {
+          "name": "Pause",
+          "description": "Pause mellom meldingene. Bruk 0 for en oppsettsekvens."
         }
       }
     }

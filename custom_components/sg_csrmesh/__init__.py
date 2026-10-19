@@ -44,7 +44,8 @@ async def async_setup(hass: HomeAssistant, _config) -> bool:
     async def _send_on_press(call: ServiceCall) -> None:
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
             await entry.runtime_data.async_send_on_press(
-                int(call.data["source"], 16), _msgs(call), timeout=call.data["timeout"]
+                int(call.data["source"], 16), _msgs(call), timeout=call.data["timeout"],
+                gap=call.data["gap"], repeats=call.data["repeats"],
             )
 
     hex_list = vol.All(cv.ensure_list, [cv.matches_regex(r"^[0-9a-fA-F ]+$")])
@@ -57,7 +58,10 @@ async def async_setup(hass: HomeAssistant, _config) -> bool:
         DOMAIN, "send_on_press", _send_on_press,
         schema=vol.Schema({vol.Required("source"): cv.matches_regex(r"^[0-9a-fA-F]{4}$"),
                            vol.Required("messages"): hex_list,
-                           vol.Optional("timeout", default=60): vol.All(int, vol.Range(5, 300))}),
+                           vol.Optional("timeout", default=60): vol.All(int, vol.Range(5, 300)),
+                           vol.Optional("repeats", default=2): vol.All(int, vol.Range(1, 5)),
+                           vol.Optional("gap", default=0.3): vol.All(
+                               vol.Coerce(float), vol.Range(0, 2))}),
     )
     return True
 

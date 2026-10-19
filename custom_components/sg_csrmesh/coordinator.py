@@ -566,19 +566,32 @@ class MeshCoordinator:
     # --- developer tools --------------------------------------------------
 
     async def async_send_raw(self, messages: list[bytes], gap: float = 0.3,
-                             repeats: int = 2) -> None:
-        """Seal and send MCP messages as given (dest + opcode + body)."""
-        for msg in messages:
-            for _ in range(repeats):
+                             repeats: int = 2, t0: float | None = None) -> None:
+        """Seal and send MCP messages as given (dest + opcode + body).
+
+        No pause after the last copy of the last message: a battery switch
+        is only awake for about two seconds after a press, and the SG app
+        fits wake, clear, set and sleep into 1.7 s.
+        """
+        t0 = time.monotonic() if t0 is None else t0
+        for i, msg in enumerate(messages):
+            for n in range(repeats):
                 await self.link.send(seal(self.key, msg))
-                await asyncio.sleep(0.12)
-            _LOGGER.info("sent raw %s", msg.hex())
-            await asyncio.sleep(gap)
+                if n < repeats - 1:
+                    await asyncio.sleep(0.12)
+            _LOGGER.info("sent raw %s (+%.2f s)", msg.hex(), time.monotonic() - t0)
+            if gap and i < len(messages) - 1:
+                await asyncio.sleep(gap)
 
     async def async_send_on_press(self, source: int, messages: list[bytes],
-                                  timeout: float = 60.0, gap: float = 0.3) -> bool:
+                                  timeout: float = 60.0, gap: float = 0.3,
+                                  repeats: int = 2) -> bool:
         """Wait for any message from ``source`` (a battery switch is awake for a
-        few seconds after a press), then send ``messages`` right away."""
+        few seconds after a press), then send ``messages`` right away.
+
+        For a configuration sequence use ``repeats=1, gap=0``: each GATT write
+        through a proxy takes ~0.4 s, so two copies per message miss the
+        switch's wake window."""
         pressed = asyncio.Event()
 
         def watch(msg) -> None:
@@ -594,8 +607,9 @@ class MeshCoordinator:
                 return False
         finally:
             remove()
+        t0 = time.monotonic()
         _LOGGER.info("send_on_press: %04x is awake, sending %d message(s)", source, len(messages))
-        await self.async_send_raw(messages, gap=gap)
+        await self.async_send_raw(messages, gap=gap, repeats=repeats, t0=t0)
         return True
 
     # --- capture ----------------------------------------------------------

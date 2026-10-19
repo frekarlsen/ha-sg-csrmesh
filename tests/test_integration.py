@@ -223,3 +223,26 @@ async def test_overlapping_captures_keep_logging(hass: HomeAssistant, send):
         await second
         assert not coord._capturing
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_send_on_press_fast_sequence(hass: HomeAssistant, send):
+    """repeats=1, gap=0: every message once, straight after the switch's message."""
+    import asyncio
+
+    entry = _entry({"c3e4": {"name": "Bryter", "kind": "switch", "tag": "0000"}})
+    await _setup(hass, entry)
+    send.reset_mock()
+    msgs = ["e4c3ff1200000101", "e4c3ff17000000 02", "e4c3ff130000000096400003", "e4c3ff1200000004"]
+    task = hass.async_create_task(
+        hass.services.async_call(
+            DOMAIN, "send_on_press",
+            {"source": "c3e4", "messages": msgs, "repeats": 1, "gap": 0, "timeout": 10},
+            blocking=True,
+        )
+    )
+    await asyncio.sleep(0)
+    press = crypto.make_packet(KEY, 9, bytes.fromhex("0080ff150000000101"), source=0xC3E4)
+    entry.runtime_data._on_frame(crypto.decrypt_packet(KEY, press))
+    await task
+    assert [p.hex() for p in _sent_payloads(send)] == [m.replace(" ", "") for m in msgs]
+    assert await hass.config_entries.async_unload(entry.entry_id)
