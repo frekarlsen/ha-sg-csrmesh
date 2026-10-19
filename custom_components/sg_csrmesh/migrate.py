@@ -27,6 +27,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .csrmesh.protocol import ADDR_APP, ADDR_BROADCAST, DeviceKind, Message
+from .models import MODELS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,16 +35,7 @@ HOMEKIT_DOMAIN = "homekit_controller"
 SG_MANUFACTURERS = ("SG Armaturen AS", "SG Armaturen")
 
 # SG model name (as the gateway reports it over HomeKit) -> what we create.
-MODEL_KIND: dict[str, DeviceKind] = {
-    "Dimmer": DeviceKind.DIMMER,
-    "DimmerGen4": DeviceKind.DIMMER,
-    "MicroPill": DeviceKind.DIMMER,
-    "MicroPillGen4": DeviceKind.DIMMER,
-    "OnOffPillMicro": DeviceKind.ONOFF,
-    "SmartSwitchV2": DeviceKind.SWITCH,
-    "SmartSwitchGen4": DeviceKind.SWITCH,
-    "ThermostatGen3": DeviceKind.THERMOSTAT,
-}
+MODEL_KIND: dict[str, DeviceKind] = {key: m.kind for key, m in MODELS.items()}
 
 # Gateway housekeeping that is not caused by our trigger.
 GATEWAY_ROUTINE_OPS = {0xFF04, 0xFF3C, 0xFF01, 0xFF26}

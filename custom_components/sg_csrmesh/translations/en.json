@@ -28,7 +28,9 @@
           "add_by_address": "Add by mesh address (advanced)",
           "remove_device": "Remove devices",
           "settings": "Settings",
-          "add_new": "Add a new (factory reset) device"
+          "add_new": "Add a new (factory reset) device",
+          "pair_switch": "Pair a Smart Switch with a light",
+          "edit_device": "Edit a device (model, switch panel)"
         }
       },
       "remove_device": {
@@ -56,7 +58,10 @@
         "data": {
           "mesh_id": "Mesh id",
           "name": "Name",
-          "kind": "Device type"
+          "model": "Model"
+        },
+        "data_description": {
+          "model": "Decides which settings the device gets. The SG app shows the model and firmware under the device's information."
         }
       },
       "migrate_device": {
@@ -90,8 +95,11 @@
         "data": {
           "device": "Device",
           "name": "Name",
-          "kind": "Type",
-          "area_id": "Room"
+          "area_id": "Room",
+          "model": "Model"
+        },
+        "data_description": {
+          "model": "Decides which settings the device gets. The SG app shows the model and firmware under the device's information."
         }
       },
       "add_new_none": {
@@ -105,18 +113,70 @@
       "remove_press": {
         "title": "Wake {name}",
         "description": "Click Submit, then press any button on {name} within a minute. HA sends the reset while it is awake."
+      },
+      "switch_panel": {
+        "title": "Panel on {name}",
+        "description": "A Smart Switch has either two rockers (left and right, four buttons) or one big rocker. Pick the panel it has now; it can be changed later under Edit a device.",
+        "data": {
+          "panel": "Panel"
+        }
+      },
+      "edit_device": {
+        "title": "Edit a device",
+        "description": "The model decides which settings a device gets in Home Assistant. It cannot be read from the device.",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "edit_device_options": {
+        "title": "Edit {name}",
+        "description": "The SG app shows the model and firmware under the device's information; Gen4 devices have firmware 1.x.x. For a Smart Switch, pick the panel it has now. Remove its pairings before changing the panel.",
+        "data": {
+          "model": "Model",
+          "panel": "Panel"
+        }
+      },
+      "pair_switch": {
+        "title": "Pair a Smart Switch",
+        "data": {
+          "switch": "Switch"
+        }
+      },
+      "pair_target": {
+        "title": "Pair {switch}",
+        "description": "The switch stores the pairing and controls the light directly, without Home Assistant. The top button switches on (hold: dim up), the bottom one off (hold: dim down).\n\nPaired from Home Assistant (pairings made in the SG app are not shown):\n- Left rocker: {left}\n- Right rocker: {right}\n\nOnly lights set up the same way as the switch are listed: both moved from the SG gateway, or both added by Home Assistant.",
+        "data": {
+          "action": "What to do",
+          "rocker": "Rocker",
+          "target": "Light"
+        }
+      },
+      "pair_target_one": {
+        "title": "Pair {switch}",
+        "description": "The switch stores the pairing and controls the light directly, without Home Assistant. Top switches on (hold: dim up), bottom off (hold: dim down).\n\nPaired from Home Assistant (pairings made in the SG app are not shown):\n- Rocker: {all}\n\nOnly lights set up the same way as the switch are listed: both moved from the SG gateway, or both added by Home Assistant.",
+        "data": {
+          "action": "What to do",
+          "target": "Light"
+        }
+      },
+      "pair_press": {
+        "title": "Press {switch}",
+        "description": "Click Submit, then briefly press any button on the switch. It only listens for a couple of seconds after a press. Whatever does not get through is sent at the next press: press again after a few seconds if it does not finish."
       }
     },
     "error": {
       "invalid_mesh_id": "Not a valid mesh id.",
-      "already_added": "That device is already added."
+      "already_added": "That device is already added.",
+      "panel_has_pairings": "Remove the switch's pairings before changing its panel.",
+      "pick_light": "Pick a light."
     },
     "progress": {
       "identify": "Making the SG gateway talk to {name} and watching the mesh …",
       "switch": "Waiting for a button press on {name} …",
       "scan": "Searching for new devices …",
       "associate": "Joining {name} to the network (key exchange, up to a minute) …",
-      "reset": "Resetting {name} …"
+      "reset": "Resetting {name} …",
+      "pair": "Waiting for a press on {switch} … Press it briefly. Not finished after a few seconds? Press once more."
     },
     "abort": {
       "not_loaded": "The integration is not loaded.",
@@ -129,16 +189,43 @@
       "identify_error": "Could not identify {name}: {error}",
       "add_new_failed": "Could not add {name}: {error}. Power-cycle the device and try again; after a failed attempt a device may refuse for about two minutes.",
       "reset_no_press": "{name} did not wake up within a minute; nothing was changed.",
-      "reset_still_in_mesh": "{name} is still answering on the mesh, so it was not factory reset. It stays in Home Assistant; nothing was changed."
+      "reset_still_in_mesh": "{name} is still answering on the mesh, so it was not factory reset. It stays in Home Assistant; nothing was changed.",
+      "no_switches": "Add a Smart Switch first.",
+      "no_matching_lights": "No light fits {switch}. A switch can only control lights set up the same way: both moved from the SG gateway, or both added by Home Assistant (factory reset and added as new).",
+      "paired": "{switch} now controls {light}. Try it: it works without Home Assistant.",
+      "unpaired": "{switch} no longer controls {light}.",
+      "pair_failed": "{switch} was not pressed within two minutes, or did not confirm. Home Assistant's record is unchanged. Try again close to a Bluetooth proxy."
     }
   },
   "selector": {
-    "kind": {
+    "model": {
       "options": {
-        "dimmer": "Dimmer (LEDDim Smart / Pill Micro)",
-        "onoff": "On/off (Smart Pill On/Off)",
-        "switch": "Smart Switch (buttons)",
-        "thermostat": "HeatReg Smart (thermostat)"
+        "DimmerGen4": "LEDDim Smart, Gen4 (firmware 1.x.x)",
+        "MicroPillGen4": "LEDDim Smart Pill Micro, Gen4 (firmware 1.x.x)",
+        "OnOffPillMicro": "LEDDim Smart Pill On/Off Micro",
+        "SmartSwitchV2": "Smart Switch",
+        "ThermostatGen3": "HeatReg Smart",
+        "Dimmer": "LEDDim Smart, older (firmware 1.59)",
+        "MicroPill": "LEDDim Smart Pill Micro, older (firmware 1.13)",
+        "SmartSwitchGen4": "Smart Switch Gen4"
+      }
+    },
+    "panel": {
+      "options": {
+        "two_rockers": "Two rockers (left and right, four buttons)",
+        "one_rocker": "One big rocker"
+      }
+    },
+    "rocker": {
+      "options": {
+        "left": "Left rocker",
+        "right": "Right rocker"
+      }
+    },
+    "pair_action": {
+      "options": {
+        "pair": "Control a light",
+        "unpair": "Remove the pairing"
       }
     }
   },
@@ -183,6 +270,77 @@
             }
           }
         }
+      },
+      "top": {
+        "name": "Top",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Press"
+            }
+          }
+        }
+      },
+      "bottom": {
+        "name": "Bottom",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Press"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "sg_trim_min": {
+        "name": "Dimmer minimum level"
+      },
+      "sg_trim_start_up": {
+        "name": "Start-up level"
+      },
+      "sg_trim_max": {
+        "name": "Maximum level"
+      }
+    },
+    "select": {
+      "sg_fading": {
+        "name": "Fading",
+        "state": {
+          "fade_0": "Off",
+          "fade_5": "0.5 s",
+          "fade_10": "1 s",
+          "fade_20": "2 s",
+          "fade_30": "3 s"
+        }
+      },
+      "sg_dimming_speed": {
+        "name": "Dimming speed",
+        "state": {
+          "normal": "Normal",
+          "fast": "Fast"
+        }
+      },
+      "sg_push_switch": {
+        "name": "Push-button input",
+        "state": {
+          "normal": "Push button",
+          "sensor": "Sensor"
+        }
+      }
+    },
+    "sensor": {
+      "sg_switch_targets": {
+        "name": "Controls"
+      },
+      "sg_paired_switches": {
+        "name": "Controlled by"
+      },
+      "floor_temperature": {
+        "name": "Floor temperature"
+      },
+      "room_temperature": {
+        "name": "Room temperature"
       }
     }
   },
@@ -236,6 +394,20 @@
           "description": "Pause between messages. Use 0 for a configuration sequence."
         }
       }
+    }
+  },
+  "exceptions": {
+    "setting_not_confirmed": {
+      "message": "{name} did not confirm the setting. It may be out of reach; try again."
+    },
+    "mesh_unavailable": {
+      "message": "No SG device is reachable over Bluetooth."
+    }
+  },
+  "issues": {
+    "missing_model": {
+      "title": "Pick the model of {name}",
+      "description": "{name} ({address}) was added before the integration knew the models. Pick its model under Settings → Devices & services → SG Smart Gen1 → Configure → Edit a device. Without a model the device works, but gets no settings."
     }
   }
 }

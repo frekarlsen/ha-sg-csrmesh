@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0rc1 – 2026-10-19
+
+- **Model at setup.** Adding a device asks for its SG model; a device moved from the gateway takes it from
+  HomeKit. The model decides which settings it gets. Devices added before 0.7.0 get a repair asking for
+  it; **Edit a device** in the options changes it.
+- **Dimmer settings** under Configuration, as in the 3.0 integration: dimmer minimum, start-up and
+  maximum level (read from the dimmer and read back after a change), fading and dimming speed, and
+  push-button input (show the value HA last sent; the dimmer cannot be read). An unacknowledged setting
+  raises an error instead of being shown as done.
+- **Smart Switch panel:** two rockers (four button entities) or one big rocker (top and bottom), chosen
+  at setup. Changing the panel removes the old button entities.
+- **Pair a Smart Switch with a light** from the options: the switch stores it and controls the light
+  without HA. Sent while the switch is awake after a press (wake, clear, set, sleep); anything not
+  acknowledged goes out at the next press. «Styrer» on the switch and «Styres av» on the light show HA's
+  record. Only lights with the switch's tag are offered (a switch cannot control a light set up the
+  other way, verified on hardware).
+- **Battery** sensor for Smart Switches (sent with every press, restored after a restart).
+- **HeatReg Smart:** set-point and on/off, current temperature (floor), floor and room temperature as
+  sensors, heating/idle. Read every 60 s. Verified on three thermostats.
+- Firmware read from Gen4 devices (and from HeatReg status) and shown on the device page.
+- Switches are no longer polled (they sleep). Event attribute `button` is now the button's key
+  (`top_left` …) instead of its number.
+
 ## 0.6.3rc1 – 2026-10-19
 
 - `send_on_press` takes `repeats` and `gap`. With `repeats: 1, gap: 0` a switch configuration

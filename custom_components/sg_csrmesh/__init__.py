@@ -10,13 +10,22 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 
-from .const import CONF_DEVICES, DOMAIN, SERVICE_CAPTURE
+from .const import CONF_DEVICES, CONF_MODEL, DOMAIN, SERVICE_CAPTURE
 from .coordinator import MeshCoordinator
+from .models import model_for
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.EVENT, Platform.LIGHT]
+PLATFORMS: list[Platform] = [
+    Platform.CLIMATE,
+    Platform.EVENT,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+]
 
 type SGConfigEntry = ConfigEntry[MeshCoordinator]
 
@@ -74,7 +83,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: SGConfigEntry) -> bool:
     _prune_devices(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _apply_areas(hass, entry)
+    _model_issues(hass, entry)
     return True
+
+
+def _model_issues(hass: HomeAssistant, entry: SGConfigEntry) -> None:
+    """Ask (as a repair) for the model of devices added before 0.7.0.
+
+    The model decides which settings a device gets; it cannot be read over
+    the mesh. Without one, a device still works, with no settings.
+    """
+    devices = entry.options.get(CONF_DEVICES, {})
+    for hex_id, cfg in devices.items():
+        issue_id = f"missing_model_{hex_id}"
+        if model_for(cfg.get(CONF_MODEL)) is None:
+            ir.async_create_issue(
+                hass, DOMAIN, issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="missing_model",
+                translation_placeholders={"name": cfg.get("name", hex_id), "address": hex_id.upper()},
+            )
+        else:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    # Issues for devices that were removed.
+    for issue_id in [
+        i for (d, i) in ir.async_get(hass).issues if d == DOMAIN and i.startswith("missing_model_")
+    ]:
+        if issue_id.removeprefix("missing_model_") not in devices:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 def _prune_devices(hass: HomeAssistant, entry: SGConfigEntry) -> None:

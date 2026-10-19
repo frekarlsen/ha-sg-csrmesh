@@ -1,11 +1,11 @@
 """Device settings for SG Gen1 (CSRmesh): trim, fading, push-button input, mode.
 
 Status: mapped from the SG Smart app's own code paths for CSR devices (method
-in docs/gen1-protocol.md). Verified on hardware: reading and setting trim (FF2A ->
-FF2B, FF29 -> FF08 29 <kind>, index format, tag 00 00 on a device joined by HA)
-fading (FF48 -> FF08 48 <fading>), push-button ack (FF47 -> FF08 47 <opt>)
-and firmware (FF5E -> FF5F). Everything else is
-unverified, and the integration sends none of it until a test confirms it.
+in docs/gen1-protocol.md). Verified on hardware (17.-19.10.2026): reading and
+setting trim (FF2A -> FF2B, FF29 -> FF08 29 <kind>, index format, both tags),
+fading (FF48 -> FF08 48 <fading>), push-button input (FF47 -> FF08 47 <opt>),
+firmware (FF5E -> FF5F) and Smart Switch pairing (FF12/FF17/FF13). Mode (FF39)
+is unverified and not used by the integration.
 
 Every SG extension message is ``<dst LE> <opcode BE> <tag> <data...>`` (see
 ``protocol.py``). The tag is the device's SG "location id" (E7 A4 on devices

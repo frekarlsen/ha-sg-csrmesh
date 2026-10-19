@@ -6,10 +6,12 @@ looking the same in HA (entity names, categories, translation style).
 
 ## Layout
 
-- `custom_components/sg_csrmesh/csrmesh/` – pure protocol (no HA imports): `crypto.py`, `protocol.py`.
-  New commands go here first, with a test in `tests/test_protocol.py`.
+- `custom_components/sg_csrmesh/csrmesh/` – pure protocol (no HA imports): `crypto.py`, `protocol.py`,
+  `settings.py` (dimmer settings, switch configuration), `heatreg.py`. New commands go here first, with
+  a test built from real captured bytes.
+- `models.py` – SG models and which settings each has (drives which entities a device gets).
 - `coordinator.py` – link, device list, state, delivery/retry, raw `send` and `capture` tools.
-- Entities: `light.py`, `event.py`, `climate.py`. Settings stored in the device go under
+- Entities: `light.py`, `event.py`, `climate.py`, `number.py`, `select.py`, `sensor.py`. Settings stored in the device go under
   `EntityCategory.CONFIG`; pairings, battery and similar under `EntityCategory.DIAGNOSTIC`.
 - `docs/` – protocol notes. Every hardware test is written down there with sent and received bytes.
 
@@ -34,11 +36,21 @@ looking the same in HA (entity names, categories, translation style).
 - User-facing errors: `HomeAssistantError` with `translation_key`.
 - Units: check per field (3.0 trim used half-percent for min/start and whole percent for max).
 
+## Gen1 specifics learned on hardware
+
+- A device only obeys messages with its own tag (`e7a4` gateway, `0000` joined by HA). A switch sends
+  with its tag, so it can only control lights with the same tag.
+- A battery switch listens ~2 s after a press. Send wake/clear/set/sleep back to back (one copy, no
+  pause) and check the acks afterwards; resend what is missing at the next press.
+- Smart Switch configuration cannot be read back; HA keeps its own record (`pairs` per switch).
+
 ## Tests and tooling
 
 - Python 3.14: `uv venv -p 3.14 && uv pip install -r requirements-test.txt`.
   `pytest-homeassistant-custom-component==0.13.346` (HA 2026.7.2). Bluetooth needs its own requirements
   in the venv (bleak, habluetooth, aiousbwatcher, serialx, aioesphomeapi).
+- Shared fixtures in `tests/conftest.py`, helpers (`make_entry`, `inject`, `answering`) in
+  `tests/helpers.py`. Requests wait 0.05 s in tests (`REQUEST_WAIT` is patched).
 - HA uses eager tasks: use `await hass.async_block_till_done(wait_background_tasks=True)`.
 - Always run the whole suite (`pytest tests`), and `ruff check custom_components tests` (ruff 0.16.0).
 - All languages must have all keys (`tests/test_integration.py::test_translations_complete`).

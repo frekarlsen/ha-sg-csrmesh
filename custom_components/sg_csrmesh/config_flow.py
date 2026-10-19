@@ -6,7 +6,14 @@ afterwards from the options menu:
 * Move from SG Gateway - pick one device the gateway exposes through HomeKit;
   HA finds its mesh address by making the gateway talk to it, you confirm by
   watching it blink, and it is created with the gateway's name and room.
+* Add a new device - join a factory-reset device to the network (MASP).
 * Add by address - advanced: pick an address heard on the mesh or type it.
+* Pair a switch - tell a Smart Switch rocker which light to control.
+* Edit a device - model (which settings it gets) and Smart Switch panel.
+
+A device's model cannot be read over the mesh: moved devices take it from
+HomeKit, otherwise the user picks it. A Smart Switch also gets its panel: two
+rockers (four buttons) or one big rocker.
 """
 
 from __future__ import annotations
@@ -25,6 +32,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -42,7 +50,10 @@ from .const import (
     CONF_KIND,
     CONF_MESH_ID,
     CONF_MIN_LEVEL,
+    CONF_MODEL,
     CONF_NETWORK_KEY,
+    CONF_PAIRS,
+    CONF_PANEL,
     CONF_PASSPHRASE,
     CONF_POLL_INTERVAL,
     CONF_TAG,
@@ -50,6 +61,7 @@ from .const import (
     DEFAULT_PASSPHRASE,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
+    SIGNAL_PAIRINGS,
 )
 from .csrmesh.crypto import parse_key_hex
 from .csrmesh.protocol import LEVEL_MAX, NO_TAG, DeviceKind
@@ -61,10 +73,24 @@ from .migrate import (
     gateway_devices,
     identify,
 )
+from .models import MODEL_CHOICES, MODELS, PANEL_TWO, PANELS, ROCKERS, models_of_kind
 
 CONF_AREA = "area_id"
 CONF_HOMEKIT = "homekit_device"
 CONF_HIDE_HOMEKIT = "hide_homekit"
+LIGHT_KINDS = (DeviceKind.DIMMER, DeviceKind.ONOFF)
+
+
+def _model_selector(choices: list[str] = MODEL_CHOICES) -> SelectSelector:
+    return SelectSelector(
+        SelectSelectorConfig(options=choices, translation_key="model", mode=SelectSelectorMode.DROPDOWN)
+    )
+
+
+def _panel_selector() -> SelectSelector:
+    return SelectSelector(
+        SelectSelectorConfig(options=PANELS, translation_key="panel", mode=SelectSelectorMode.LIST)
+    )
 
 
 def _describe(addr: int, body_hex: str) -> str:
@@ -151,7 +177,8 @@ class SGOptionsFlow(OptionsFlowWithReload):
         return self.async_show_menu(
             step_id="init",
             menu_options=[
-                "migrate_device", "add_new", "add_by_address", "remove_device", "settings",
+                "migrate_device", "add_new", "add_by_address", "pair_switch",
+                "edit_device", "remove_device", "settings",
             ],
         )
 
@@ -264,16 +291,44 @@ class SGOptionsFlow(OptionsFlowWithReload):
         return await self.async_step_migrate_confirm()
 
     async def async_step_migrate_save(self, user_input=None) -> ConfigFlowResult:
-        opts = self._opts()
-        opts[CONF_DEVICES][f"{self._found:04x}"] = {
+        cfg = {
             "name": self._gw.name,
             CONF_KIND: self._gw.kind.value,
             CONF_AREA: self._gw.area_id,
             CONF_HOMEKIT: self._gw.device_id,
-            "model": self._gw.model,
+            CONF_MODEL: self._gw.model,
         }
+        if self._gw.sw_version:
+            cfg["sw_version"] = self._gw.sw_version
         if self._hide_homekit:
             disable_homekit_entities(self.hass, self._gw)
+        return await self._save_device(f"{self._found:04x}", cfg)
+
+    # --------------------------------------------- saving a new device
+
+    _pending: tuple[str, dict] | None = None
+
+    async def _save_device(self, hex_id: str, cfg: dict) -> ConfigFlowResult:
+        """Store a new device; a Smart Switch first gets its panel chosen."""
+        self._pending = (hex_id, cfg)
+        if cfg[CONF_KIND] == DeviceKind.SWITCH and CONF_PANEL not in cfg:
+            return await self.async_step_switch_panel()
+        return self._store_pending()
+
+    async def async_step_switch_panel(self, user_input=None) -> ConfigFlowResult:
+        if user_input is not None:
+            self._pending[1][CONF_PANEL] = user_input[CONF_PANEL]
+            return self._store_pending()
+        return self.async_show_form(
+            step_id="switch_panel",
+            data_schema=vol.Schema({vol.Required(CONF_PANEL, default=PANEL_TWO): _panel_selector()}),
+            description_placeholders={"name": self._pending[1]["name"]},
+        )
+
+    def _store_pending(self) -> ConfigFlowResult:
+        hex_id, cfg = self._pending
+        opts = self._opts()
+        opts[CONF_DEVICES][hex_id] = {**opts[CONF_DEVICES].get(hex_id, {}), **cfg}
         return self.async_create_entry(data=opts)
 
     async def async_step_migrate_failed(self, user_input=None) -> ConfigFlowResult:
@@ -325,9 +380,11 @@ class SGOptionsFlow(OptionsFlowWithReload):
             self._new_choice = next(
                 d for d in self._new_list if f"{d.uuid_hash:08x}" == user_input["device"]
             )
+            model = MODELS[user_input[CONF_MODEL]]
             self._new_cfg = {
                 "name": user_input["name"].strip() or self._new_choice.mac,
-                CONF_KIND: user_input[CONF_KIND],
+                CONF_KIND: model.kind.value,
+                CONF_MODEL: model.key,
                 CONF_AREA: user_input.get(CONF_AREA),
             }
             self._task = None
@@ -345,11 +402,7 @@ class SGOptionsFlow(OptionsFlowWithReload):
                         SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
                     ),
                     vol.Required("name"): TextSelector(),
-                    vol.Required(CONF_KIND, default=DeviceKind.DIMMER): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[k.value for k in DeviceKind], translation_key="kind"
-                        )
-                    ),
+                    vol.Required(CONF_MODEL, default=MODEL_CHOICES[0]): _model_selector(),
                     vol.Optional(CONF_AREA): AreaSelector(),
                 }
             ),
@@ -384,10 +437,10 @@ class SGOptionsFlow(OptionsFlowWithReload):
         return self.async_show_progress_done(next_step_id="add_new_save")
 
     async def async_step_add_new_save(self, user_input=None) -> ConfigFlowResult:
-        opts = self._opts()
         # A device joined by HA (no gateway) uses tag 00 00 from the start.
-        opts[CONF_DEVICES][f"{self._found:04x}"] = {**self._new_cfg, CONF_TAG: NO_TAG.hex()}
-        return self.async_create_entry(data=opts)
+        return await self._save_device(
+            f"{self._found:04x}", {**self._new_cfg, CONF_TAG: NO_TAG.hex()}
+        )
 
     async def async_step_add_new_failed(self, user_input=None) -> ConfigFlowResult:
         return self.async_abort(
@@ -413,11 +466,11 @@ class SGOptionsFlow(OptionsFlowWithReload):
             elif f"{mesh_id:04x}" in opts[CONF_DEVICES]:
                 errors[CONF_MESH_ID] = "already_added"
             else:
-                opts[CONF_DEVICES][f"{mesh_id:04x}"] = {
-                    "name": user_input["name"],
-                    CONF_KIND: user_input[CONF_KIND],
-                }
-                return self.async_create_entry(data=opts)
+                model = MODELS[user_input[CONF_MODEL]]
+                return await self._save_device(
+                    f"{mesh_id:04x}",
+                    {"name": user_input["name"], CONF_KIND: model.kind.value, CONF_MODEL: model.key},
+                )
 
         seen = [
             {"value": f"{addr:04x}", "label": _describe(addr, info.body)}
@@ -437,14 +490,251 @@ class SGOptionsFlow(OptionsFlowWithReload):
                         )
                     ),
                     vol.Required("name"): TextSelector(),
-                    vol.Required(CONF_KIND, default=DeviceKind.DIMMER): SelectSelector(
-                        SelectSelectorConfig(
-                            options=[k.value for k in DeviceKind], translation_key="kind"
-                        )
-                    ),
+                    vol.Required(CONF_MODEL, default=MODEL_CHOICES[0]): _model_selector(),
                 }
             ),
             errors=errors,
+        )
+
+    # ------------------------------------------------------- edit device
+
+    _edit_hex: str | None = None
+
+    def _device_choices(self, kinds=None) -> list[SelectOptionDict]:
+        return [
+            SelectOptionDict(value=k, label=f"{v['name']} ({k.upper()})")
+            for k, v in self._opts()[CONF_DEVICES].items()
+            if kinds is None or v.get(CONF_KIND) in kinds
+        ]
+
+    async def async_step_edit_device(self, user_input=None) -> ConfigFlowResult:
+        """Pick a device to change its model (and a switch's panel)."""
+        if not self._opts()[CONF_DEVICES]:
+            return self.async_abort(reason="no_devices")
+        if user_input is not None:
+            self._edit_hex = user_input["device"]
+            return await self.async_step_edit_device_options()
+        return self.async_show_form(
+            step_id="edit_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=self._device_choices(), mode=SelectSelectorMode.DROPDOWN
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_device_options(self, user_input=None) -> ConfigFlowResult:
+        opts = self._opts()
+        cfg = opts[CONF_DEVICES][self._edit_hex]
+        kind = DeviceKind(cfg[CONF_KIND])
+        choices = models_of_kind(kind)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            panel = user_input.get(CONF_PANEL, cfg.get(CONF_PANEL, PANEL_TWO))
+            if (
+                kind == DeviceKind.SWITCH
+                and panel != cfg.get(CONF_PANEL, PANEL_TWO)
+                and cfg.get(CONF_PAIRS)
+            ):
+                errors[CONF_PANEL] = "panel_has_pairings"
+            else:
+                cfg[CONF_MODEL] = user_input[CONF_MODEL]
+                if kind == DeviceKind.SWITCH:
+                    cfg[CONF_PANEL] = panel
+                return self.async_create_entry(data=opts)
+        current = cfg.get(CONF_MODEL)
+        schema = {
+            vol.Required(
+                CONF_MODEL, default=current if current in choices else choices[0]
+            ): _model_selector(choices)
+        }
+        if kind == DeviceKind.SWITCH:
+            schema[vol.Required(CONF_PANEL, default=cfg.get(CONF_PANEL, PANEL_TWO))] = (
+                _panel_selector()
+            )
+        return self.async_show_form(
+            step_id="edit_device_options",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={"name": cfg["name"]},
+        )
+
+    # ------------------------------------------------------ pair switch
+
+    _pair_switch: str | None = None
+    _pair_rocker: str | None = None
+    _pair_target: str | None = None  # None: remove the pairing
+
+    def _switch_cfg(self) -> dict:
+        return self._opts()[CONF_DEVICES][self._pair_switch]
+
+    def _pair_lights(self) -> list[SelectOptionDict]:
+        """Lights the switch can control: a device only obeys its own tag."""
+        devices = self._opts()[CONF_DEVICES]
+        sw_tag = devices[self._pair_switch].get(CONF_TAG)
+        return [
+            SelectOptionDict(value=k, label=f"{v['name']} ({k.upper()})")
+            for k, v in devices.items()
+            if v.get(CONF_KIND) in LIGHT_KINDS
+            and (sw_tag is None or v.get(CONF_TAG) in (None, sw_tag))
+        ]
+
+    def _name_of(self, hex_id: str | None) -> str:
+        if hex_id is None:
+            return "–"
+        cfg = self._opts()[CONF_DEVICES].get(hex_id)
+        return cfg["name"] if cfg else hex_id.upper()
+
+    async def async_step_pair_switch(self, user_input=None) -> ConfigFlowResult:
+        """Pick the Smart Switch (skipped when there is only one)."""
+        if self._coordinator is None:
+            return self.async_abort(reason="not_loaded")
+        switches = self._device_choices({DeviceKind.SWITCH})
+        if not switches:
+            return self.async_abort(reason="no_switches")
+        if user_input is not None or len(switches) == 1:
+            self._pair_switch = user_input["switch"] if user_input else switches[0]["value"]
+            return await self.async_step_pair_target()
+        return self.async_show_form(
+            step_id="pair_switch",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("switch"): SelectSelector(
+                        SelectSelectorConfig(options=switches, mode=SelectSelectorMode.DROPDOWN)
+                    )
+                }
+            ),
+        )
+
+    async def async_step_pair_target(self, user_input=None) -> ConfigFlowResult:
+        """Rocker, light and whether to pair or remove (two-rocker panel)."""
+        return await self._pair_target_form("pair_target", user_input)
+
+    async def async_step_pair_target_one(self, user_input=None) -> ConfigFlowResult:
+        """The same for a switch with one big rocker."""
+        return await self._pair_target_form("pair_target_one", user_input)
+
+    async def _pair_target_form(self, step_id: str, user_input) -> ConfigFlowResult:
+        sw = self._switch_cfg()
+        panel = sw.get(CONF_PANEL, PANEL_TWO)
+        rockers = list(ROCKERS[panel])
+        if step_id == "pair_target" and len(rockers) == 1:
+            return await self.async_step_pair_target_one(user_input)
+        pairs = sw.get(CONF_PAIRS, {})
+        lights = self._pair_lights()
+        if not lights and not pairs:
+            return self.async_abort(
+                reason="no_matching_lights", description_placeholders={"switch": sw["name"]}
+            )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            self._pair_rocker = user_input.get("rocker", rockers[0])
+            if user_input["action"] == "unpair":
+                self._pair_target = None
+            elif not user_input.get("target"):
+                errors["target"] = "pick_light"
+            else:
+                self._pair_target = user_input["target"]
+            if not errors:
+                self._task = None
+                return await self.async_step_pair_press()
+        schema: dict = {
+            vol.Required("action", default="pair"): SelectSelector(
+                SelectSelectorConfig(
+                    options=["pair", "unpair"], translation_key="pair_action",
+                    mode=SelectSelectorMode.LIST,
+                )
+            )
+        }
+        if len(rockers) > 1:
+            schema[vol.Required("rocker", default=rockers[0])] = SelectSelector(
+                SelectSelectorConfig(
+                    options=rockers, translation_key="rocker", mode=SelectSelectorMode.LIST
+                )
+            )
+        if lights:
+            schema[vol.Optional("target")] = SelectSelector(
+                SelectSelectorConfig(options=lights, mode=SelectSelectorMode.DROPDOWN)
+            )
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema(schema),
+            errors=errors,
+            description_placeholders={
+                "switch": sw["name"],
+                **{r: self._name_of(pairs.get(r)) for r in ("left", "right", "all")},
+            },
+        )
+
+    async def async_step_pair_press(self, user_input=None) -> ConfigFlowResult:
+        if user_input is not None:
+            return await self.async_step_pair_run()
+        return self.async_show_form(
+            step_id="pair_press",
+            data_schema=vol.Schema({}),
+            description_placeholders={"switch": self._switch_cfg()["name"]},
+        )
+
+    async def async_step_pair_run(self, user_input=None) -> ConfigFlowResult:
+        coord = self._coordinator
+        sw = self._switch_cfg()
+        if self._task is None:
+            sw_id = int(self._pair_switch, 16)
+            buttons = ROCKERS[sw.get(CONF_PANEL, PANEL_TWO)][self._pair_rocker]
+            if self._pair_target is None:
+                units = coord.unpair_steps(sw_id, buttons)
+            else:
+                units = coord.pair_steps(sw_id, buttons, int(self._pair_target, 16))
+            self._task = self.hass.async_create_task(
+                coord.async_configure_switch(sw_id, units), "sg_csrmesh configure switch"
+            )
+        if not self._task.done():
+            return self.async_show_progress(
+                step_id="pair_run",
+                progress_action="pair",
+                progress_task=self._task,
+                description_placeholders={"switch": sw["name"]},
+            )
+        try:
+            ok = self._task.result()
+        except Exception:  # noqa: BLE001 - reported as not done
+            ok = False
+        self._task = None
+        return self.async_show_progress_done(next_step_id="pair_done" if ok else "pair_failed")
+
+    async def async_step_pair_done(self, user_input=None) -> ConfigFlowResult:
+        """Record the pairing (HA's own record) and say what changed."""
+        opts = self._opts()
+        sw = opts[CONF_DEVICES][self._pair_switch]
+        pairs = dict(sw.get(CONF_PAIRS, {}))
+        old = pairs.get(self._pair_rocker)
+        if self._pair_target is None:
+            pairs.pop(self._pair_rocker, None)
+        else:
+            pairs[self._pair_rocker] = self._pair_target
+        sw[CONF_PAIRS] = pairs
+        # No reload needed: the pairing sensors read the options when told.
+        self.hass.config_entries.async_update_entry(self.config_entry, options=opts)
+        async_dispatcher_send(self.hass, SIGNAL_PAIRINGS)
+        if self._pair_target is None:
+            return self.async_abort(
+                reason="unpaired",
+                description_placeholders={"switch": sw["name"], "light": self._name_of(old)},
+            )
+        return self.async_abort(
+            reason="paired",
+            description_placeholders={
+                "switch": sw["name"], "light": self._name_of(self._pair_target)
+            },
+        )
+
+    async def async_step_pair_failed(self, user_input=None) -> ConfigFlowResult:
+        return self.async_abort(
+            reason="pair_failed", description_placeholders={"switch": self._switch_cfg()["name"]}
         )
 
     _remove_hex: str | None = None

@@ -8,38 +8,55 @@ import logging
 import secrets
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
 from .bridge import MeshLink, NoMeshNodeError
 from .const import (
     CAPTURE_BUFFER,
     CONF_DEVICES,
+    CONF_FADING,
     CONF_KIND,
     CONF_MIN_LEVEL,
+    CONF_MODEL,
     CONF_NETWORK_KEY,
+    CONF_PANEL,
     CONF_PASSPHRASE,
     CONF_POLL_INTERVAL,
+    CONF_PUSH,
+    CONF_SPEED,
     CONF_TAG,
     DEFAULT_MIN_LEVEL,
     DEFAULT_PASSPHRASE,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
     EVENT_FRAME,
+    FIRMWARE_DELAY,
     SIGNAL_UPDATE,
     STATUS_LISTEN_TIME,
+    THERMOSTAT_POLL,
 )
 from .csrmesh.crypto import (
     DecodedFrame,
     decrypt_packet,
     network_key_from_passphrase,
     parse_key_hex,
+)
+from .csrmesh.heatreg import (
+    OP_SETPOINT,
+    parse_status,
+    parse_temperatures,
+    power_cmd,
+    setpoint_cmd,
+    temperatures_get_cmd,
 )
 from .csrmesh.protocol import (
     ADDR_APP,
@@ -49,14 +66,40 @@ from .csrmesh.protocol import (
     SG_TAG,
     STATUS_OPS,
     DeviceKind,
+    Message,
     parse_light_status,
     parse_message,
     parse_switch_event,
-    parse_thermostat,
     poll_cmd,
     seal,
     set_cmd,
 )
+from .csrmesh.settings import (
+    OP_ACK,
+    OP_FADING,
+    OP_FIRMWARE,
+    OP_PUSH_SWITCH,
+    OP_SWITCH_BUTTON,
+    OP_SWITCH_CLEAR,
+    OP_TRIM,
+    OP_TRIM_SET,
+    TrimKind,
+    TrimLevels,
+    fading_cmd,
+    firmware_get_cmd,
+    parse_ack,
+    parse_battery,
+    parse_firmware,
+    parse_trim,
+    push_switch_cmd,
+    switch_awake_cmd,
+    switch_button_cmd,
+    switch_clear_cmd,
+    trim_get_cmd,
+    trim_index,
+    trim_set_cmd,
+)
+from .models import BUTTON_KEYS, PANEL_TWO, Model, model_for
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +120,9 @@ POLL_WAIT = 2.0        # s for the FF05 answer to our check
 MAX_ROUNDS = 3
 RESYNC_DELAY = 1.5     # s; re-read a device after it was used by hand
 RESET_SETTLE = 2.0     # s after disassociate before checking it is gone
+REQUEST_WAIT = 1.5       # s for an answer before a command is sent again
+SWITCH_ACK_SETTLE = 1.0  # s after a switch configuration for the last acks
+SWITCH_TIMEOUT = 120.0   # s the user has to press the switch while configuring it
 
 
 class StillInMeshError(HomeAssistantError):
@@ -107,13 +153,44 @@ class MeshDevice:
     level: int | None = None          # percent; kept while off
     last_seen: float | None = None
     extra: dict = field(default_factory=dict)  # thermostat values etc.
-    model: str | None = None
+    model: str | None = None  # SG type name (models.py); None = not chosen yet
     tag: bytes = SG_TAG  # learned from the device's own messages, persisted
     tag_known: bool = False  # stored or heard; until then polls try both
+    panel: str = PANEL_TWO  # Smart Switch: two rockers or one big rocker
+    trim: TrimLevels | None = None  # read from the dimmer
+    battery: int | None = None  # percent, sent by a switch with every press
 
     @property
     def hex_id(self) -> str:
         return f"{self.mesh_id:04x}"
+
+    @property
+    def model_info(self) -> Model | None:
+        return model_for(self.model)
+
+
+@dataclass(slots=True)
+class SwitchStep:
+    """One command to a battery switch and the acknowledgement that proves it."""
+
+    build: Callable[[int], bytes]   # transaction id -> message
+    match: Callable[[Message], bool]
+
+
+def ack_from(mesh_id: int, opcode: int, first: int | None = None) -> Callable[[Message], bool]:
+    """Match FF08 from ``mesh_id`` acknowledging ``opcode`` (and its first data byte)."""
+
+    def match(msg: Message) -> bool:
+        if msg.source != mesh_id or msg.opcode != OP_ACK:
+            return False
+        ack = parse_ack(msg)
+        return (
+            ack is not None
+            and ack.opcode == opcode
+            and (first is None or ack.rest[:1] == bytes([first]))
+        )
+
+    return match
 
 
 @dataclass(slots=True)
@@ -152,9 +229,10 @@ class MeshCoordinator:
                 int(hex_id, 16),
                 cfg["name"],
                 DeviceKind(cfg[CONF_KIND]),
-                model=cfg.get("model"),
+                model=cfg.get(CONF_MODEL),
                 tag=_tag_from_cfg(cfg),
                 tag_known=CONF_TAG in cfg,
+                panel=cfg.get(CONF_PANEL, PANEL_TWO),
             )
             for hex_id, cfg in entry.options.get(CONF_DEVICES, {}).items()
         }
@@ -180,7 +258,10 @@ class MeshCoordinator:
         self._drain_task: asyncio.Task | None = None
         self._draining = False
         self._unsub_poll = None
+        self._unsub_thermostats = None
+        self._unsub_firmware = None
         self._observers: list = []
+        self._trim_reads: dict[int, asyncio.Task] = {}
 
     # --- lifecycle --------------------------------------------------------
 
@@ -191,11 +272,20 @@ class MeshCoordinator:
             self._unsub_poll = async_track_time_interval(
                 self.hass, self._poll, timedelta(seconds=interval), name=f"{DOMAIN} status"
             )
+        if any(d.kind == DeviceKind.THERMOSTAT for d in self.devices.values()):
+            self._unsub_thermostats = async_track_time_interval(
+                self.hass, self._poll_thermostats, timedelta(seconds=THERMOSTAT_POLL),
+                name=f"{DOMAIN} thermostats",
+            )
         self.entry.async_create_background_task(self.hass, self._poll(), f"{DOMAIN} first poll")
+        self._unsub_firmware = async_call_later(self.hass, FIRMWARE_DELAY, self._start_firmware_read)
 
     async def async_stop(self) -> None:
-        if self._unsub_poll:
-            self._unsub_poll()
+        for unsub in (self._unsub_poll, self._unsub_thermostats, self._unsub_firmware):
+            if unsub:
+                unsub()
+        for task in self._trim_reads.values():
+            task.cancel()
         for handle in self._resync.values():
             handle.cancel()
         self._resync.clear()
@@ -258,18 +348,42 @@ class MeshCoordinator:
             _LOGGER.debug("%04x uses tag %s", dev.mesh_id, msg.tag.hex())
             dev.tag, dev.tag_known = msg.tag, True
             self._persist_tag(dev)
-        if dev.kind in (DeviceKind.DIMMER, DeviceKind.ONOFF) and (st := parse_light_status(msg)):
-            dev.on, dev.level = st.on, st.level
-            self._track_delivery(dev, st.on, st.level, st.unsolicited)
+        if dev.kind in (DeviceKind.DIMMER, DeviceKind.ONOFF):
+            if msg.opcode == OP_TRIM and (levels := parse_trim(msg)):
+                dev.trim = levels
+                self._notify(dev)
+            elif st := parse_light_status(msg):
+                dev.on, dev.level = st.on, st.level
+                self._track_delivery(dev, st.on, st.level, st.unsolicited)
+                self._notify(dev)
+        elif dev.kind == DeviceKind.SWITCH:
+            self._on_switch_message(dev, msg)
+        elif dev.kind == DeviceKind.THERMOSTAT:
+            self._on_thermostat_message(dev, msg)
+
+    def _on_switch_message(self, dev: MeshDevice, msg: Message) -> None:
+        if (battery := parse_battery(msg)) is not None:
+            if battery.level != dev.battery:
+                dev.battery = battery.level
+                self._notify(dev)
+            return
+        if (button := parse_switch_event(msg)) is None:
+            return
+        key = BUTTON_KEYS.get(dev.panel, BUTTON_KEYS[PANEL_TWO]).get(button)
+        if key is not None and self._is_new_press(dev, key):
+            async_dispatcher_send(self.hass, f"{SIGNAL_UPDATE}_{dev.hex_id}_button_{key}", "press")
+
+    def _on_thermostat_message(self, dev: MeshDevice, msg: Message) -> None:
+        if msg.dest != ADDR_APP:
+            return
+        if status := parse_status(msg):
+            dev.on = status.on
+            dev.extra.update(heating=status.heating, target=status.target)
+            self._set_sw_version(dev.mesh_id, status.firmware)
             self._notify(dev)
-        elif dev.kind == DeviceKind.SWITCH and (button := parse_switch_event(msg)) is not None:
-            if self._is_new_press(dev, button):
-                async_dispatcher_send(
-                    self.hass, f"{SIGNAL_UPDATE}_{dev.hex_id}_button_{button}", "press"
-                )
-        elif dev.kind == DeviceKind.THERMOSTAT and parse_thermostat(msg) is not None:
-            # TODO: -> {"current", "target", "mode"} into dev.extra
-            pass
+        elif temps := parse_temperatures(msg):
+            dev.extra.update(room=temps.room, floor=temps.floor, max_floor=temps.max_floor)
+            self._notify(dev)
 
     def _track_delivery(self, dev: MeshDevice, on: bool, level: int, by_hand: bool) -> None:
         """Match a light status against the HA command in flight, if any."""
@@ -309,20 +423,37 @@ class MeshCoordinator:
 
     def _persist_tag(self, dev: MeshDevice) -> None:
         """Keep the learned tag, so commands after a restart use it at once."""
+        self.update_device_cfg(dev.mesh_id, {CONF_TAG: dev.tag.hex()})
+
+    def device_cfg(self, mesh_id: int) -> dict:
+        return self.entry.options.get(CONF_DEVICES, {}).get(f"{mesh_id:04x}", {})
+
+    def update_device_cfg(self, mesh_id: int, changes: dict) -> None:
+        """Merge ``changes`` into one device's stored options (no reload)."""
         devices = self.entry.options.get(CONF_DEVICES, {})
-        cfg = devices.get(dev.hex_id)
-        if cfg is None or cfg.get(CONF_TAG) == dev.tag.hex():
+        key = f"{mesh_id:04x}"
+        cfg = devices.get(key)
+        if cfg is None or all(cfg.get(k) == v for k, v in changes.items()):
             return
         new = {k: dict(v) for k, v in devices.items()}
-        new[dev.hex_id][CONF_TAG] = dev.tag.hex()
+        new[key].update(changes)
         self.hass.config_entries.async_update_entry(
             self.entry, options={**self.entry.options, CONF_DEVICES: new}
         )
 
+    def _set_sw_version(self, mesh_id: int, version: str) -> None:
+        """Record a firmware version read from the device, and show it in HA."""
+        if self.device_cfg(mesh_id).get("sw_version") == version:
+            return
+        self.update_device_cfg(mesh_id, {"sw_version": version})
+        dev_reg = dr.async_get(self.hass)
+        if device := dev_reg.async_get_device(identifiers={(DOMAIN, f"{mesh_id:04x}")}):
+            dev_reg.async_update_device(device.id, sw_version=version)
+
     # --- outbound ---------------------------------------------------------
 
     @staticmethod
-    def _is_new_press(dev: MeshDevice, button: int) -> bool:
+    def _is_new_press(dev: MeshDevice, button: str) -> bool:
         """Turn FF15 messages into real presses.
 
         * The mesh delivers one press 2-3 times within a couple of seconds.
@@ -452,11 +583,14 @@ class MeshCoordinator:
 
     async def _poll(self, _now=None) -> None:
         try:
-            targets = [
-                poll_cmd(mesh_id, tag)
-                for mesh_id in self.devices
-                for tag in self._poll_tags(mesh_id)
-            ] or [poll_cmd(ADDR_BROADCAST)]
+            targets = []
+            for mesh_id, dev in self.devices.items():
+                if dev.kind == DeviceKind.SWITCH:
+                    continue  # asleep; it reports itself when pressed
+                targets += [poll_cmd(mesh_id, tag) for tag in self._poll_tags(mesh_id)]
+                if dev.kind == DeviceKind.THERMOSTAT:
+                    targets.append(temperatures_get_cmd(mesh_id, self._tag(mesh_id)))
+            targets = targets or [poll_cmd(ADDR_BROADCAST)]
             for i, cmd in enumerate(targets):
                 last = i == len(targets) - 1
                 await self.link.send(
@@ -472,6 +606,34 @@ class MeshCoordinator:
             self._set_unavailable(err)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("status poll failed: %s", err)
+
+    async def _poll_thermostats(self, _now=None) -> None:
+        """Set-point and state (FF04), room and floor temperature (FF3C 00)."""
+        for mesh_id, dev in self.devices.items():
+            if dev.kind != DeviceKind.THERMOSTAT:
+                continue
+            tag = self._tag(mesh_id)
+            try:
+                for cmd in (poll_cmd(mesh_id, tag), temperatures_get_cmd(mesh_id, tag)):
+                    await self.link.send(seal(self.key, cmd), listen=POLL_SPACING)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("thermostat poll of %04x failed: %s", mesh_id, err)
+
+    @callback
+    def _start_firmware_read(self, _now=None) -> None:
+        self._unsub_firmware = None
+        self.entry.async_create_background_task(
+            self.hass, self._read_all_firmware(), f"{DOMAIN} firmware"
+        )
+
+    async def _read_all_firmware(self) -> None:
+        for mesh_id, dev in list(self.devices.items()):
+            if (info := dev.model_info) is None or not info.firmware:
+                continue
+            try:
+                await self.async_read_firmware(mesh_id)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("firmware read of %04x failed: %s", mesh_id, err)
 
     def _set_unavailable(self, err: Exception) -> None:
         if self.available:
@@ -560,6 +722,233 @@ class MeshCoordinator:
                 if heard.is_set():
                     return True
             return False
+        finally:
+            remove()
+
+    # --- commands with an answer -------------------------------------------
+
+    async def async_request(self, message: bytes, match: Callable[[Message], bool], *,
+                            tries: int = 3, wait: float | None = None) -> Message | None:
+        """Send ``message`` (same bytes each time) until an answer matches.
+
+        Returns the answer, or None if every try went unanswered. Silence is
+        not a rejection, so the same message (same TID) is simply sent again;
+        the device drops a duplicate it already acted on.
+        """
+        wait = REQUEST_WAIT if wait is None else wait
+        loop = self.hass.loop
+        answer: asyncio.Future[Message] = loop.create_future()
+
+        def watch(msg: Message) -> None:
+            if not answer.done() and match(msg):
+                answer.set_result(msg)
+
+        remove = self.add_observer(watch)
+        try:
+            for _ in range(tries):
+                try:
+                    await self.link.send(seal(self.key, message))
+                except NoMeshNodeError as err:
+                    raise HomeAssistantError(
+                        translation_domain=DOMAIN, translation_key="mesh_unavailable"
+                    ) from err
+                with contextlib.suppress(TimeoutError):
+                    return await asyncio.wait_for(asyncio.shield(answer), wait)
+            return None
+        finally:
+            remove()
+            if not answer.done():
+                answer.cancel()
+
+    # --- dimmer settings ----------------------------------------------------
+
+    @callback
+    def async_request_trim(self, mesh_id: int) -> None:
+        """Read trim in the background; entities asking at once share one read."""
+        if (task := self._trim_reads.get(mesh_id)) is not None and not task.done():
+            return
+        self._trim_reads[mesh_id] = self.entry.async_create_background_task(
+            self.hass, self._read_trim(mesh_id), f"{DOMAIN} trim {mesh_id:04x}"
+        )
+
+    async def _read_trim(self, mesh_id: int) -> None:
+        try:
+            await self.async_read_trim(mesh_id)
+        except Exception as err:  # noqa: BLE001 - background; the entity stays unknown
+            _LOGGER.debug("trim read of %04x failed: %s", mesh_id, err)
+
+    async def async_read_trim(self, mesh_id: int) -> TrimLevels | None:
+        """FF2A -> FF2B; ``_on_frame`` stores the answer on the device."""
+        await self.async_request(
+            trim_get_cmd(mesh_id, self._tag(mesh_id)),
+            lambda m: m.source == mesh_id and m.opcode == OP_TRIM,
+        )
+        return self.devices[mesh_id].trim
+
+    async def async_set_trim(self, mesh_id: int, kind: TrimKind, percent: float) -> bool:
+        """Set one trim level, then read back what the dimmer stored."""
+        index = trim_index(kind, percent)
+        tag = self._tag(mesh_id)
+        if await self.async_request(
+            trim_set_cmd(mesh_id, kind, index, tag), ack_from(mesh_id, OP_TRIM_SET, kind)
+        ) is None:
+            return False
+        await self.async_read_trim(mesh_id)
+        return True
+
+    async def async_set_fading(self, mesh_id: int, tenths: int, fast: bool) -> bool:
+        """Start-up fading and dimming speed (one command). Cannot be read back."""
+        ok = await self.async_request(
+            fading_cmd(mesh_id, tenths, fast, self._tag(mesh_id)),
+            ack_from(mesh_id, OP_FADING, tenths),
+        )
+        if ok is not None:
+            self.update_device_cfg(mesh_id, {CONF_FADING: tenths, CONF_SPEED: int(fast)})
+            self._notify(self.devices[mesh_id])
+        return ok is not None
+
+    async def async_set_push_input(self, mesh_id: int, sensor: bool) -> bool:
+        """External push-button input: 0 push button, 1 sensor. Cannot be read back."""
+        ok = await self.async_request(
+            push_switch_cmd(mesh_id, sensor, self._tag(mesh_id)),
+            ack_from(mesh_id, OP_PUSH_SWITCH, int(sensor)),
+        )
+        if ok is not None:
+            self.update_device_cfg(mesh_id, {CONF_PUSH: int(sensor)})
+            self._notify(self.devices[mesh_id])
+        return ok is not None
+
+    async def async_read_firmware(self, mesh_id: int) -> str | None:
+        msg = await self.async_request(
+            firmware_get_cmd(mesh_id, self._tag(mesh_id)),
+            lambda m: m.source == mesh_id and m.opcode == OP_FIRMWARE,
+            tries=2,
+        )
+        if msg is None or (version := parse_firmware(msg)) is None:
+            return None
+        self._set_sw_version(mesh_id, version)
+        return version
+
+    # --- thermostats --------------------------------------------------------
+
+    async def async_set_thermostat_target(self, mesh_id: int, celsius: float) -> bool:
+        cmd = setpoint_cmd(mesh_id, celsius, self._next_tid(), self._tag(mesh_id))
+        if await self.async_request(cmd, ack_from(mesh_id, OP_SETPOINT)) is None:
+            return False
+        dev = self.devices[mesh_id]
+        dev.extra["target"] = round(cmd[6] + cmd[7] / 10, 1)
+        self._notify(dev)
+        self.entry.async_create_background_task(
+            self.hass, self._poll_one(mesh_id), f"{DOMAIN} check {mesh_id:04x}"
+        )
+        return True
+
+    async def async_set_thermostat_power(self, mesh_id: int, on: bool) -> bool:
+        """FF42 has no acknowledgement: ask (FF04) until the status shows it."""
+        tag = self._tag(mesh_id)
+        cmd = power_cmd(mesh_id, on, self._next_tid(), tag)
+
+        def shows_it(msg: Message) -> bool:
+            if msg.source != mesh_id or msg.dest != ADDR_APP:
+                return False
+            status = parse_status(msg)
+            return status is not None and status.on == on
+
+        for _ in range(3):
+            try:
+                await self.link.send(seal(self.key, cmd))
+            except NoMeshNodeError as err:
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN, translation_key="mesh_unavailable"
+                ) from err
+            await asyncio.sleep(REPEAT_GAP)
+            if await self.async_request(poll_cmd(mesh_id, tag), shows_it, tries=1, wait=POLL_WAIT):
+                return True
+        return False
+
+    # --- Smart Switch configuration ---------------------------------------
+
+    def pair_steps(self, switch_id: int, buttons: tuple[int, ...],
+                   target: int) -> list[list[SwitchStep]]:
+        """Clear, then set, each rocker: the SG app's sequence (docs 6.1)."""
+        tag = self._tag(switch_id)
+        return [
+            [
+                SwitchStep(
+                    lambda tid, b=b: switch_clear_cmd(switch_id, b, tid, tag),
+                    ack_from(switch_id, OP_SWITCH_CLEAR, b),
+                ),
+                SwitchStep(
+                    lambda tid, b=b: switch_button_cmd(switch_id, b, target, tid, tag=tag),
+                    ack_from(switch_id, OP_SWITCH_BUTTON, b),
+                ),
+            ]
+            for b in buttons
+        ]
+
+    def unpair_steps(self, switch_id: int, buttons: tuple[int, ...]) -> list[list[SwitchStep]]:
+        tag = self._tag(switch_id)
+        return [
+            [
+                SwitchStep(
+                    lambda tid, b=b: switch_clear_cmd(switch_id, b, tid, tag),
+                    ack_from(switch_id, OP_SWITCH_CLEAR, b),
+                )
+            ]
+            for b in buttons
+        ]
+
+    async def async_configure_switch(self, switch_id: int, units: list[list[SwitchStep]],
+                                     timeout: float = SWITCH_TIMEOUT) -> bool:
+        """Configure a battery switch while it is awake after a press.
+
+        Each press sends: wake (FF12 01), every unfinished unit, sleep (FF12
+        00), back to back as the SG app does (each GATT write through a proxy
+        takes ~0.4 s and the switch listens for ~2 s). A unit is done when
+        all its commands were acknowledged; what is left goes out on the next
+        press. True when every unit is done, False if no press came in time.
+        """
+        tag = self._tag(switch_id)
+        pending = list(units)
+        woke = asyncio.Event()
+        acks: list[Message] = []
+
+        def watch(msg: Message) -> None:
+            if msg.source != switch_id:
+                return
+            if msg.opcode == OP_ACK:
+                acks.append(msg)
+            else:
+                woke.set()
+
+        loop = self.hass.loop
+        deadline = loop.time() + timeout
+        remove = self.add_observer(watch)
+        try:
+            while pending:
+                woke.clear()
+                try:
+                    await asyncio.wait_for(woke.wait(), max(0.0, deadline - loop.time()))
+                except TimeoutError:
+                    _LOGGER.info("%04x: no press, %d step(s) not sent", switch_id, len(pending))
+                    return False
+                acks.clear()
+                t0 = time.monotonic()
+                messages = [switch_awake_cmd(switch_id, True, self._next_tid(), tag)]
+                messages += [step.build(self._next_tid()) for unit in pending for step in unit]
+                messages.append(switch_awake_cmd(switch_id, False, self._next_tid(), tag))
+                await self.async_send_raw(messages, gap=0, repeats=1, t0=t0)
+                await asyncio.sleep(SWITCH_ACK_SETTLE)
+                pending = [
+                    unit for unit in pending
+                    if not all(any(step.match(a) for a in acks) for step in unit)
+                ]
+                if pending:
+                    _LOGGER.info(
+                        "%04x: %d unit(s) not acknowledged; waiting for the next press",
+                        switch_id, len(pending),
+                    )
+            return True
         finally:
             remove()
 

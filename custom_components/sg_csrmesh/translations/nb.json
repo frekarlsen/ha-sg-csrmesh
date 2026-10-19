@@ -28,7 +28,9 @@
           "add_by_address": "Legg til med mesh-adresse (avansert)",
           "remove_device": "Fjern enheter",
           "settings": "Innstillinger",
-          "add_new": "Legg til ny (fabrikkresatt) enhet"
+          "add_new": "Legg til ny (fabrikkresatt) enhet",
+          "pair_switch": "Koble en Smart Switch til et lys",
+          "edit_device": "Endre en enhet (modell, bryterpanel)"
         }
       },
       "remove_device": {
@@ -56,7 +58,10 @@
         "data": {
           "mesh_id": "Mesh-ID",
           "name": "Navn",
-          "kind": "Enhetstype"
+          "model": "Modell"
+        },
+        "data_description": {
+          "model": "Bestemmer hvilke innstillinger enheten får. SG-appen viser modell og fastvare under enhetsinformasjonen."
         }
       },
       "migrate_device": {
@@ -90,8 +95,11 @@
         "data": {
           "device": "Enhet",
           "name": "Navn",
-          "kind": "Type",
-          "area_id": "Rom"
+          "area_id": "Rom",
+          "model": "Modell"
+        },
+        "data_description": {
+          "model": "Bestemmer hvilke innstillinger enheten får. SG-appen viser modell og fastvare under enhetsinformasjonen."
         }
       },
       "add_new_none": {
@@ -105,18 +113,70 @@
       "remove_press": {
         "title": "Vekk {name}",
         "description": "Trykk Send, og trykk deretter på en hvilken som helst knapp på {name} innen ett minutt. HA sender tilbakestillingen mens den er våken."
+      },
+      "switch_panel": {
+        "title": "Panel på {name}",
+        "description": "En Smart Switch har enten to vipper (venstre og høyre, fire knapper) eller én stor vippe. Velg panelet den har nå. Det kan endres senere under «Endre en enhet».",
+        "data": {
+          "panel": "Panel"
+        }
+      },
+      "edit_device": {
+        "title": "Endre en enhet",
+        "description": "Modellen bestemmer hvilke innstillinger enheten får i Home Assistant. Den kan ikke leses fra enheten.",
+        "data": {
+          "device": "Enhet"
+        }
+      },
+      "edit_device_options": {
+        "title": "Endre {name}",
+        "description": "SG-appen viser modell og fastvare under enhetsinformasjonen. Gen4-enheter har fastvare 1.x.x. For en Smart Switch: velg panelet den har nå. Fjern bryterkoblingene før du bytter panel.",
+        "data": {
+          "model": "Modell",
+          "panel": "Panel"
+        }
+      },
+      "pair_switch": {
+        "title": "Koble en Smart Switch",
+        "data": {
+          "switch": "Bryter"
+        }
+      },
+      "pair_target": {
+        "title": "Koble {switch}",
+        "description": "Bryteren lagrer koblingen og styrer lyset direkte, uten Home Assistant. Øverste knapp slår på (hold: dimmer opp), nederste slår av (hold: dimmer ned).\n\nKoblet fra Home Assistant (koblinger gjort i SG-appen vises ikke):\n- Venstre vippe: {left}\n- Høyre vippe: {right}\n\nBare lys som er satt opp på samme måte som bryteren vises: begge flyttet fra SG-gatewayen, eller begge lagt til av Home Assistant.",
+        "data": {
+          "action": "Hva skal gjøres",
+          "rocker": "Vippe",
+          "target": "Lys"
+        }
+      },
+      "pair_target_one": {
+        "title": "Koble {switch}",
+        "description": "Bryteren lagrer koblingen og styrer lyset direkte, uten Home Assistant. Øverst slår på (hold: dimmer opp), nederst slår av (hold: dimmer ned).\n\nKoblet fra Home Assistant (koblinger gjort i SG-appen vises ikke):\n- Vippen: {all}\n\nBare lys som er satt opp på samme måte som bryteren vises: begge flyttet fra SG-gatewayen, eller begge lagt til av Home Assistant.",
+        "data": {
+          "action": "Hva skal gjøres",
+          "target": "Lys"
+        }
+      },
+      "pair_press": {
+        "title": "Trykk på {switch}",
+        "description": "Trykk Send, og trykk så kort på en knapp på bryteren. Den hører bare etter i et par sekunder etter et trykk. Det som ikke kommer fram, sendes ved neste trykk: trykk igjen etter noen sekunder hvis det ikke blir ferdig."
       }
     },
     "error": {
       "invalid_mesh_id": "Ugyldig mesh-ID.",
-      "already_added": "Enheten er allerede lagt til."
+      "already_added": "Enheten er allerede lagt til.",
+      "panel_has_pairings": "Fjern bryterkoblingene før du bytter panel.",
+      "pick_light": "Velg et lys."
     },
     "progress": {
       "identify": "Får SG-gatewayen til å snakke med {name} og lytter i meshen …",
       "switch": "Venter på et knappetrykk på {name} …",
       "scan": "Søker etter nye enheter …",
       "associate": "Melder {name} inn i nettverket (nøkkelutveksling, opptil ett minutt) …",
-      "reset": "Tilbakestiller {name} …"
+      "reset": "Tilbakestiller {name} …",
+      "pair": "Venter på et trykk på {switch} … Trykk kort på bryteren. Ikke ferdig etter noen sekunder? Trykk én gang til."
     },
     "abort": {
       "not_loaded": "Integrasjonen er ikke lastet.",
@@ -129,16 +189,43 @@
       "identify_error": "Kunne ikke identifisere {name}: {error}",
       "add_new_failed": "Kunne ikke legge til {name}: {error}. Slå enheten av og på og prøv igjen; etter et mislykket forsøk kan enheten nekte i rundt to minutter.",
       "reset_no_press": "{name} våknet ikke innen ett minutt; ingenting ble endret.",
-      "reset_still_in_mesh": "{name} svarer fortsatt i meshen og ble derfor ikke fabrikkresatt. Enheten blir liggende i Home Assistant; ingenting ble endret."
+      "reset_still_in_mesh": "{name} svarer fortsatt i meshen og ble derfor ikke fabrikkresatt. Enheten blir liggende i Home Assistant; ingenting ble endret.",
+      "no_switches": "Legg til en Smart Switch først.",
+      "no_matching_lights": "Ingen lys passer til {switch}. En bryter kan bare styre lys som er satt opp på samme måte: begge flyttet fra SG-gatewayen, eller begge lagt til av Home Assistant (fabrikkresatt og lagt til som ny).",
+      "paired": "{switch} styrer nå {light}. Prøv bryteren: det virker uten Home Assistant.",
+      "unpaired": "{switch} styrer ikke lenger {light}.",
+      "pair_failed": "{switch} ble ikke trykket på innen to minutter, eller bekreftet ikke. Home Assistants oversikt er ikke endret. Prøv igjen nær en Bluetooth-proxy."
     }
   },
   "selector": {
-    "kind": {
+    "model": {
       "options": {
-        "dimmer": "Dimmer (LEDDim Smart / Pill Micro)",
-        "onoff": "Av/på (Smart Pill On/Off)",
-        "switch": "Smart Switch (knapper)",
-        "thermostat": "HeatReg Smart (termostat)"
+        "DimmerGen4": "LEDDim Smart, Gen4 (fastvare 1.x.x)",
+        "MicroPillGen4": "LEDDim Smart Pill Micro, Gen4 (fastvare 1.x.x)",
+        "OnOffPillMicro": "LEDDim Smart Pill On/Off Micro",
+        "SmartSwitchV2": "Smart Switch",
+        "ThermostatGen3": "HeatReg Smart",
+        "Dimmer": "LEDDim Smart, eldre (fastvare 1.59)",
+        "MicroPill": "LEDDim Smart Pill Micro, eldre (fastvare 1.13)",
+        "SmartSwitchGen4": "Smart Switch Gen4"
+      }
+    },
+    "panel": {
+      "options": {
+        "two_rockers": "To vipper (venstre og høyre, fire knapper)",
+        "one_rocker": "Én stor vippe"
+      }
+    },
+    "rocker": {
+      "options": {
+        "left": "Venstre vippe",
+        "right": "Høyre vippe"
+      }
+    },
+    "pair_action": {
+      "options": {
+        "pair": "Styr et lys",
+        "unpair": "Fjern koblingen"
       }
     }
   },
@@ -183,6 +270,77 @@
             }
           }
         }
+      },
+      "top": {
+        "name": "Øverst",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Trykk"
+            }
+          }
+        }
+      },
+      "bottom": {
+        "name": "Nederst",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "press": "Trykk"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "sg_trim_min": {
+        "name": "Minimumsnivå i dimmeren"
+      },
+      "sg_trim_start_up": {
+        "name": "Oppstartsnivå"
+      },
+      "sg_trim_max": {
+        "name": "Maksnivå"
+      }
+    },
+    "select": {
+      "sg_fading": {
+        "name": "Fading",
+        "state": {
+          "fade_0": "Av",
+          "fade_5": "0,5 s",
+          "fade_10": "1 s",
+          "fade_20": "2 s",
+          "fade_30": "3 s"
+        }
+      },
+      "sg_dimming_speed": {
+        "name": "Dimmehastighet",
+        "state": {
+          "normal": "Normal",
+          "fast": "Rask"
+        }
+      },
+      "sg_push_switch": {
+        "name": "Trykkbryterinngang",
+        "state": {
+          "normal": "Trykkbryter",
+          "sensor": "Sensor"
+        }
+      }
+    },
+    "sensor": {
+      "sg_switch_targets": {
+        "name": "Styrer"
+      },
+      "sg_paired_switches": {
+        "name": "Styres av"
+      },
+      "floor_temperature": {
+        "name": "Gulvtemperatur"
+      },
+      "room_temperature": {
+        "name": "Romtemperatur"
       }
     }
   },
@@ -236,6 +394,20 @@
           "description": "Pause mellom meldingene. Bruk 0 for en oppsettsekvens."
         }
       }
+    }
+  },
+  "exceptions": {
+    "setting_not_confirmed": {
+      "message": "{name} bekreftet ikke innstillingen. Den kan være utenfor rekkevidde; prøv igjen."
+    },
+    "mesh_unavailable": {
+      "message": "Ingen SG-enhet kan nås over Bluetooth."
+    }
+  },
+  "issues": {
+    "missing_model": {
+      "title": "Velg modell for {name}",
+      "description": "{name} ({address}) ble lagt til før integrasjonen kjente modellene. Velg modell under Innstillinger → Enheter og tjenester → SG Smart Gen1 → Konfigurer → «Endre en enhet». Uten modell virker enheten, men den får ingen innstillinger."
     }
   }
 }

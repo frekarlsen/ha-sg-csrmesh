@@ -1,4 +1,4 @@
-"""Diagnostics: recent decrypted frames, for mapping Switch/HeatReg formats."""
+"""Diagnostics: devices as HA sees them, the link, and recent decrypted frames."""
 
 from __future__ import annotations
 
@@ -44,8 +44,16 @@ async def async_get_config_entry_diagnostics(
             if n.address not in {v.address for v in c.link.visible_nodes()}
         ],
         "devices": {
-            d.hex_id: {"name": d.name, "kind": d.kind, "on": d.on, "level": d.level,
-                        "tag": d.tag.hex(), "last_seen": d.last_seen}
+            d.hex_id: {
+                "name": d.name, "kind": d.kind, "model": d.model, "on": d.on, "level": d.level,
+                "tag": d.tag.hex(), "last_seen": d.last_seen, "panel": d.panel,
+                "trim": d.trim and [d.trim.min_index, d.trim.startup_index, d.trim.max_index],
+                "battery": d.battery,
+                "thermostat": {
+                    k: v for k, v in d.extra.items()
+                    if k in ("target", "heating", "room", "floor", "max_floor")
+                },
+            }
             for d in c.devices.values()
         },
         "raw_notifications_last_capture": c.raw_count,

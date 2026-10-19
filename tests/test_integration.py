@@ -4,68 +4,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-import pytest
+from helpers import KEY
+from helpers import make_entry as _entry
+from helpers import sent_payloads as _sent_payloads
+from helpers import setup as _setup
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.sg_csrmesh.const import DOMAIN
 from custom_components.sg_csrmesh.csrmesh import crypto
 
-pytest_plugins = "pytest_homeassistant_custom_component"
-
 COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / DOMAIN
-KEY = crypto.network_key_from_passphrase("1234")
-
-
-@pytest.fixture(autouse=True)
-def _enable(enable_custom_integrations):
-    yield
-
-
-@pytest.fixture(autouse=True)
-def _no_bt():
-    """No radio: the link never connects and every send is recorded instead."""
-    with (
-        patch("custom_components.sg_csrmesh.bridge.MeshLink.start"),
-        patch("custom_components.sg_csrmesh.bridge.MeshLink.stop", AsyncMock()),
-        patch("homeassistant.components.bluetooth.async_setup", return_value=True),
-        patch("homeassistant.components.bluetooth.async_setup_entry", return_value=True),
-    ):
-        yield
-
-
-@pytest.fixture
-def send():
-    with patch("custom_components.sg_csrmesh.bridge.MeshLink.send", AsyncMock()) as mock:
-        yield mock
-
-
-def _entry(devices=None, **options):
-    return MockConfigEntry(
-        domain=DOMAIN,
-        unique_id=DOMAIN,
-        data={"passphrase": "1234"},
-        options={"devices": devices or {}, "poll_interval": 0, "min_level": 10, **options},
-    )
-
-
-def _sent_payloads(send: AsyncMock) -> list[bytes]:
-    out = []
-    for call in send.await_args_list:
-        frame = crypto.decrypt_packet(KEY, call.args[0])
-        assert frame is not None
-        out.append(frame.payload)
-    return out
-
-
-async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 async def test_user_flow(hass: HomeAssistant):
@@ -94,15 +46,17 @@ async def test_options_add_by_address(hass: HomeAssistant, send):
         r["flow_id"], {"next_step_id": "add_by_address"}
     )
     r = await hass.config_entries.options.async_configure(
-        r["flow_id"], {"mesh_id": "8000", "name": "App", "kind": "dimmer"}
+        r["flow_id"], {"mesh_id": "8000", "name": "App", "model": "DimmerGen4"}
     )
     assert r["errors"] == {"mesh_id": "invalid_mesh_id"}
     r = await hass.config_entries.options.async_configure(
-        r["flow_id"], {"mesh_id": "1A2B", "name": "Stue", "kind": "dimmer"}
+        r["flow_id"], {"mesh_id": "1A2B", "name": "Stue", "model": "DimmerGen4"}
     )
     assert r["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert entry.options["devices"] == {"1a2b": {"name": "Stue", "kind": "dimmer"}}
+    assert entry.options["devices"] == {
+        "1a2b": {"name": "Stue", "kind": "dimmer", "model": "DimmerGen4"}
+    }
     assert hass.states.get("light.stue") is not None
 
 
@@ -169,7 +123,9 @@ async def test_switch_press_fires_event_once(hass: HomeAssistant, send):
     for _ in range(3):  # the mesh delivers one press 2-3 times
         coord._on_frame(crypto.decrypt_packet(KEY, press))
     await hass.async_block_till_done(wait_background_tasks=True)
-    states = [s for s in hass.states.async_all("event") if s.attributes.get("button") == 0]
+    states = [
+        s for s in hass.states.async_all("event") if s.attributes.get("button") == "top_left"
+    ]
     assert len(states) == 1 and states[0].state not in ("unknown", "unavailable")
 
 

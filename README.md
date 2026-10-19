@@ -7,25 +7,50 @@ nettverks-PIN og enhetsadresser.
 Søsterprosjekt for SG Smart 3.0 (Bluetooth SIG Mesh):
 [ha-sg-smart-mesh](https://github.com/frekarlsen/ha-sg-smart-mesh).
 
-## Status (v0.6.2)
+## Status (v0.7.0)
 
 | Enhet | I HA | Status |
 |---|---|---|
-| LEDDim Smart, Smart Pill Micro (også Gen4) | `light` med dimming | Virker. Sett med `FF03`, les med `FF04`/`FF05`. Endringer gjort for hånd kommer som `FF50`/`FF88` |
-| Smart Pill On/Off | `light` av/på | Virker |
-| Smart Switch | `event` per knapp | Virker (`FF15`). Batteri er ukjent |
-| HeatReg Smart | `climate` | Rammeverk. Formatet er ikke kartlagt |
+| LEDDim Smart, LEDDim Smart Pill Micro | `light` med dimming | Virker. Endringer gjort for hånd kommer som `FF50`/`FF88` |
+| LEDDim Smart Pill On/Off Micro | `light` av/på | Virker |
+| Smart Switch | `event` per knapp, batteri, «Styrer» | Virker. To vipper eller én stor vippe velges ved oppsett |
+| HeatReg Smart | `climate`, gulv- og romtemperatur | Ønsket temperatur og av/på, verifisert |
 
-Enheter kan legges til på tre måter, fra **Konfigurer**:
+Innstillinger som lagres i enheten, vises under **Konfigurasjon** på enhetssiden:
 
-- **Flytt fra SG Gateway:** en enhet som gatewayen viser over HomeKit, får adresse, navn og rom automatisk.
-- **Legg til ny:** en fabrikknullstilt enhet legges inn i meshen (MASP, via `recsrmesh`).
-- **Legg til på adresse:** for avanserte brukere.
+| Innstilling | Modeller | Lest fra enheten |
+|---|---|---|
+| Minimumsnivå i dimmeren, oppstartsnivå, maksnivå | Pill Micro og Gen4 | Ja, og lest tilbake etter endring |
+| Fading og dimmehastighet | Gen4 | Nei: viser det HA sist sendte |
+| Trykkbryterinngang (trykkbryter / sensor) | Gen4 | Nei: viser det HA sist sendte |
 
-Enheter kan også fjernes, eventuelt med fabrikknullstilling.
+### Oppsett av en enhet
 
-Under arbeid: innstillinger som lagres i enheten (trim, fading, trykkbryterinngang) og direkte paring av
-Smart Switch til dimmer. Se [docs/gen1-protocol.md](docs/gen1-protocol.md).
+Alt gjøres under **Innstillinger → Enheter og tjenester → SG Smart Gen1 → Konfigurer**:
+
+- **Flytt en enhet fra SG-gatewayen:** navn, rom og modell hentes fra gatewayen (HomeKit), og HA finner
+  adressen selv.
+- **Legg til ny (fabrikkresatt) enhet:** HA legger enheten inn i nettverket. Du velger navn, rom og modell.
+- **Legg til med mesh-adresse:** for avanserte brukere.
+- For en **Smart Switch** velger du også panelet: to vipper (fire knapper) eller én stor vippe.
+- **Endre en enhet:** bytt modell eller bryterpanel senere. Enheter lagt til før 0.7.0 får et varsel
+  under Reparasjoner til modellen er valgt.
+
+Modellen bestemmer hvilke innstillinger enheten får. Den kan ikke leses over meshen. SG-appen viser modell og
+fastvare under enhetsinformasjonen: Gen4-enheter har fastvare 1.x.x, eldre LEDDim Smart 1.59 og eldre Pill
+Micro 1.13.
+
+### Koble en Smart Switch til et lys
+
+**Konfigurer → Koble en Smart Switch til et lys:** velg vippe og lys, trykk Send, og trykk så kort på
+bryteren. Bryteren lagrer koblingen og styrer lyset direkte, også når HA er nede. Øverst slår på (hold:
+dimmer opp), nederst slår av (hold: dimmer ned). Samme sted fjernes en kobling.
+
+- En bryter kan bare styre lys som er satt opp på samme måte: begge flyttet fra SG-gatewayen, eller begge
+  lagt til av HA. Dialogen viser bare lys som passer.
+- «Styrer» (på bryteren) og «Styres av» (på lyset) er HAs egen oversikt over koblinger gjort fra HA. En
+  bryter kan ikke spørres om koblingene sine, så koblinger gjort i SG-appen vises ikke.
+- Knappene gir fortsatt hendelser i HA, også når de er koblet til et lys.
 
 ## Krav
 
@@ -59,12 +84,14 @@ Arkitektur:
 ```
 csrmesh/crypto.py     nøkkel fra PIN, AES-128-OFB + HMAC-rammer        (ren Python)
 csrmesh/protocol.py   SG-meldinger, statusparser, fragmentsamling      (ren Python)
-csrmesh/settings.py   trim, fading, trykkbryter, modus (ikke verifisert) (ren Python)
+csrmesh/settings.py   trim, fading, trykkbryter, fastvare, bryteroppsett (ren Python)
+csrmesh/heatreg.py    HeatReg: status, temperaturer, ønsket temperatur   (ren Python)
+models.py             SGs modeller og hvilke innstillinger hver har
 bridge.py             én GATT-link via HA Bluetooth / ESPHome-proxy
-coordinator.py        enheter, tilstand, levering med kvittering, verktøy
+coordinator.py        enheter, tilstand, levering med kvittering, innstillinger, bryteroppsett
 migrate.py            flytting fra SG-gatewayen (HomeKit)
 provision.py          legge til og fjerne enheter (MASP)
-light.py event.py climate.py   entiteter
+light.py event.py climate.py number.py select.py sensor.py   entiteter
 ```
 
 ## Kreditering og lisens

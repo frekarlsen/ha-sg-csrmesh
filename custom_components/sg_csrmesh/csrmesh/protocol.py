@@ -24,8 +24,8 @@ The fiskentnt/com.sgsmart.csrmesh notes describe a different command set
 (A0 with F2 E7) for other installations; it is kept below as ``legacy_a0_cmd``
 for reference but not used.
 
-Smart Switch and HeatReg frames are recorded (see ``StatusMessage.body``) but
-not interpreted yet.
+Smart Switch presses are below; settings, switch configuration and HeatReg
+are in ``settings.py`` and ``heatreg.py``.
 """
 
 from __future__ import annotations
@@ -193,11 +193,6 @@ def parse_switch_event(msg: Message) -> int | None:
         return None
     button = msg.body[0]
     return button if button < BUTTONS else None
-
-
-def parse_thermostat(msg: Message):  # noqa: ANN201 - format unknown yet
-    """TODO: HeatReg Smart frames. Fill in from your own captures."""
-    return None
 
 
 class FrameAssembler:
