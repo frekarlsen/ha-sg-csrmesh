@@ -121,3 +121,17 @@ def test_real_firmware_and_push_switch():
     assert s.parse_ack(_msg(0x9640, "0080ff0800004800")) == s.Ack(s.OP_FADING, b"\x00")
     assert s.fading_cmd(0x9640, 0, tag=protocol.NO_TAG).hex() == "4096ff4800000000"
     assert s.push_switch_cmd(0x9640, False, tag=protocol.NO_TAG).hex() == "4096ff47000000"
+
+
+def test_switch_frames_captured():
+    """Captured 17.-19.10.2026 from switch c3e4 (joined by HA, tag 00 00)."""
+    tag = protocol.NO_TAG
+    assert s.switch_awake_cmd(0xC3E4, True, 0x05, tag=tag).hex() == "e4c3ff1200000105"
+    assert s.switch_awake_cmd(0xC3E4, False, 0x0D, tag=tag).hex() == "e4c3ff120000000d"
+    assert s.parse_ack(_msg(0xC3E4, "0080ff08000012")) == s.Ack(s.OP_SWITCH_AWAKE, b"")
+    assert s.switch_button_cmd(0xC3E4, 0, 0x9640, 0x0B, tag=tag).hex() == (
+        "e4c3ff13000000009640000b"
+    )
+    bat = s.parse_battery(_msg(0xC3E4, "00008301641003"))
+    assert bat == s.Battery(level=100, state=0x10, counter=3)
+    assert s.parse_battery(_msg(0xC3E4, "0080ff150000000101")) is None

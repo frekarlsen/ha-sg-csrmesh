@@ -37,6 +37,7 @@ Alle bytene står etter taggen.
 | Ekstern trykkbryter | `FF47` | `OPT` | `00` normal, `01` sensor (**ikke** `01`/`02` som i 3.0) | `FF08 47 OPT`. Kvittering verifisert 17.10.2026 (for `00`) |
 | Fading + dimmehastighet | `FF48` | `FADE SPEED` | FADE i tideler sekund. Appens valg: `00` av, `05`, `0A`, `14`, `1E` (RGBW-typer: bare `05` og `1E`). SPEED `00` normal, `01` rask | `FF08 48 FADE`. **Verifisert** 17.10.2026 (`1E` og `00`) |
 | Les fastvare | `FF5E` | – | | `FF5F A B C D E F G`. Appen viser `A.B.C/D.E.F/G`. **Verifisert** 17.10.2026 |
+| Bryter: hold deg våken / sov | `FF12` | `AWAKE TID` | `01` våken (før oppsett), `00` sov (etter) | `FF08 12`. **Verifisert** 19.10.2026 |
 | Bryterknapp → enhet (Gen2-brytere) | `FF13` | `BTN TYPE MÅL_HI MÅL_LO 00 TID` | sendes **til bryteren**. TYPE `00` av/på-par, `07` dimming med én knapp, `08` CCT. MÅL er big-endian | `FF08 13 BTN TYPE`?, se punkt 5 |
 | Bryterknapp → enhet (V1-brytere) | `FF14` | `A B 00 MÅL_HI MÅL_LO 00` | Gammel Smart Switch (type `SmartSwitch`) | – |
 | Nullstill bryterknapp | `FF17` | `BTN X` | | – |
@@ -137,6 +138,33 @@ ukjent, men den har trim, og da er den ikke en eldre `Dimmer`. Lampen var av.
   taggen.
 - **Trykkbryter normal, kvittert.** Sendt `4096ff47000000`, og svaret var `ff08 0000 47 00`. Kvitteringen
   gjentar valget. Det er ingen synlig endring, fordi normal trolig var fabrikkverdien.
+**17.–19.10.2026: bryterparing, `c3e4` «trykkbryter_01» → `9640`. Ikke lykkes ennå.**
+`c3e4` er lagt til fra HA (tag `0000`), og modellen er ukjent. Venstre side ble brukt, og
+automasjonen var slått av under testen.
+
+- **`FF12` hold deg våken / sov, verifisert.** `e4c3 ff12 0000 01 TID` ble kvittert med
+  `ff08 0000 12` hver gang den kom fram innen ca. 1 s etter et trykk. `… 00 TID` (sov) er kvittert
+  på samme måte. Byten er en bool fra appens `setSmartSwitchSleep(sleep)`: `01` = ikke sov, `00` = sov.
+  Bryteren svarer likevel **ikke** når HA sender uten at noen har trykket rett før (testet ca. 60 s
+  etter `01`), så «våken» varer ikke mellom trykk. Ved en feil ble også `0c` sendt og kvittert, og
+  bryteren står igjen på `00`.
+- **`FF13` knapp → dimmer: ingen kvittering og ingen virkning, fire forsøk.**
+  - 17.10: `FF13` uten `FF12`, sendt 0,6 s etter trykket.
+  - 19.10: `FF13` 10 s etter `FF12`-kvitteringen, altså for sent.
+  - 19.10: `FF12 01` og `FF13` × 2 i samme vindu, `FF13` 2–4 s etter trykket.
+  - 19.10: `FF13` som første melding, 0,5–1 s etter trykket, mens bryteren fortsatt sendte. Den var
+    altså våken.
+  - Sendt: `e4c3 ff13 0000 BTN 00 9640 00 TID` (BTN 0 og 1, TID 01, 02, 08, 09, 0b).
+  - Bryteren hørte trolig kommandoen, men godtok den ikke. Mulige årsaker: et annet format for denne
+    bryteren, en manglende `locationId` (enheter lagt til fra HA har aldri fått en fra SG-appen), eller
+    et steg appen gjør først som vi ikke kjenner.
+- **Andre meldinger fra bryteren ved hvert trykk:**
+  - `0080 ff15 0000 BTN 01 01`: tastetrykket, som før.
+  - `0080 ff07 0000 N`: appens «reset button response», en trykkteller (`resetCount`).
+  - `0000 83 01 64 10 N`: standard CSRmesh **batteristatus** (`BATTERY_STATE`), med nivå `0x64` = 100 %
+    og tilstand `0x10`. N er bryterens egen teller. Den kan gi batterinivået i HA.
+- Neste steg: fang trafikken mens SG-appen konfigurerer en knapp på en bryter som er på gatewayen
+  (test 6). Gatewayen har ni `SmartSwitchV2` og én `SmartSwitchGen4` («Smart Switch Kjeller»).
 - Feil i verktøyet: når to `capture` overlapper, slår den første av loggingen for den andre når den
   avslutter. Rettet i `coordinator.py`.
 - Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
