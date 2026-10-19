@@ -243,3 +243,26 @@ def parse_battery(msg: Message) -> Battery | None:
 def switch_clear_cmd(mesh_id: int, button: int, tid: int, tag: bytes = SG_TAG) -> bytes:
     """FF17: clear one button (rocker) before setting it, as the app does."""
     return ext_cmd(mesh_id, OP_SWITCH_CLEAR, tag, bytes([button, tid & 0xFF]))
+
+
+# --- Devices in the mesh without a location -----------------------------------
+# The SG app asks every device with tag 00 00 for its name (FF10 to 0x0000),
+# seen 19.10.2026. A device the SG gateway removed keeps the network key and
+# only loses its location (tag), so it answers this but not an association
+# search: FF11 <tag 00 00> <6 ASCII: type + last 4 of the MAC> <1 byte ?>.
+
+OP_NAME_GET = 0xFF10
+OP_NAME = 0xFF11
+
+
+def name_query_cmd(tag: bytes = b"\x00\x00") -> bytes:
+    return ext_cmd(0x0000, OP_NAME_GET, tag)
+
+
+def parse_name(msg: Message) -> str | None:
+    """FF11: the device's advertised name without the @, e.g. "MODBC3"."""
+    if msg.opcode != OP_NAME or len(msg.body) < 6:
+        return None
+    raw = bytes(msg.body[:6])
+    return raw.decode("ascii") if all(0x30 <= b < 0x7F for b in raw) else None
+

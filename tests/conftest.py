@@ -27,7 +27,10 @@ def _no_bt():
 @pytest.fixture(autouse=True)
 def _short_waits():
     """Unanswered requests give up quickly: no radio answers in tests."""
-    with patch("custom_components.sg_csrmesh.coordinator.REQUEST_WAIT", 0.05):
+    with (
+        patch("custom_components.sg_csrmesh.coordinator.REQUEST_WAIT", 0.05),
+        patch("custom_components.sg_csrmesh.coordinator.NAME_QUERY_TIME", 0.05),
+    ):
         yield
 
 

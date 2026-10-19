@@ -278,6 +278,20 @@ Ved trykk øverst høyre (11:49:07, bryteren sendte fortsatt `ff03` til `89e0`):
   knapp, beviser det også nullstillingen, selv om `FF17`-kvitteringen gikk tapt. Er bare `FF17`
   kvittert, sendes bare `FF13` ved neste trykk. Da kommer den tidlig nok (+0,96 s).
 
+**19.10.2026: en enhet fjernet fra SG-gatewayen er fortsatt i meshen.** En LEDDim Smart Pill Micro
+(`@MODBC3`, `00:01:B3:13:DB:C3`) var «fabrikkresatt fra gatewayen», men svarte ikke på HAs MASP-søk
+(søket via `@GD8352` hørte bare sitt eget ekko), og direkte tilkobling feilet på −93 dBm.
+
+- Mens SG-appen var åpen, sendte telefonen `0000 ff10 0000` (navnespørring til alle med tag `0000`) hvert
+  4. sekund. Svar: `df73 → 0080 ff11 0000 4d 4f 44 42 43 33 d8` = «MODBC3» + `d8`, og `9640 → … "GD8352" c3`.
+- `73df ff04 0000` → `ff05 0000 00 32 00 00 0d` (av, nivå 50 %). **Gatewayens «fjern» sletter bare
+  plasseringen (tag `e7a4` → `0000`). Enheten beholder nettverksnøkkelen** og legges til på adressen, uten
+  nøkkelutveksling. Fra 0.7.0rc4 viser «Legg til ny enhet» slike enheter.
+- Etterpå sendte pillen `ff07 0000 e1`, `e3`, `e4` og så `e4` omtrent hvert sekund. Det er trolig appens
+  tilbakestillingsteller, sendt mens enheten slås av og på for fabrikkreset. Ikke kartlagt.
+- Navnet i `FF11` er typen og de fire siste i MAC-adressen, det samme som annonseringsnavnet etter `@`.
+  Den siste byten (`d8`, `c3`) er ukjent.
+
 **19.10.2026: HeatReg Smart (`ThermostatGen3`), verifisert.** Tre termostater på gatewayen (tag
 `e7a4`): `808c` Varmekabler Bad (fastvare 52.0), `8505` Varmekabler Kjellerstue (53.2) og `f03f`
 Varmekabler Yttergang (53.2). Kryssjekket mot verdiene gatewayen viser i HomeKit.
@@ -349,8 +363,9 @@ SG-appen for en enhet som fortsatt er på gatewayen mens fangsten går.
   regner topp som knapp 0+3 og bunn som 1+2 i `FF15`. Ikke testet på maskinvare ennå (test i 0.7.0rc1).
 - HeatReg: sensormodus (rom/gulv) står ikke i statusen. Integrasjonen viser gulvtemperaturen, som
   gatewayen. Betydningen av flaggbit 4 og 7, og av `FF5C`, er ikke kartlagt. Ingen `FF08` for `FF42`.
-- Modellen kan ikke leses over meshen. Annonseringsnavnet (`@GDxxxx` …) kan kanskje gi typen, men det er
-  bare sett for én enhet (`GD8352` = `9640`, trolig `DimmerGen4`).
+- Modellen kan ikke leses over meshen. Navnet (`@GDxxxx`, også i `FF11`) kan gi typen, men det er bare
+  bekreftet for `GD` = `DimmerGen4` (`9640`). `MO` er en LEDDim Smart Pill Micro ifølge SG-appen
+  (`MODBC3`).
 - Bryterens egen paringstabell kan ikke leses. HA fører sin egen oversikt.
 
 ## 8. I integrasjonen (0.7.0rc2)

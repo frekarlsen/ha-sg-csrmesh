@@ -365,3 +365,42 @@ async def test_pinned_link_uses_only_that_node(hass: HomeAssistant, send):
     device = object()
     with patch(target, return_value=device):
         assert link._candidates() == [device]
+
+
+async def test_add_device_removed_from_gateway(hass: HomeAssistant, send):
+    """19.10.2026: the gateway's "remove" kept MODBC3 in the mesh as DF73 with tag 00 00.
+
+    It answers the SG app's name query (FF10 -> FF11), not an association search.
+    """
+    from unittest.mock import AsyncMock
+
+    from homeassistant.data_entry_flow import FlowResultType
+
+    entry = make_entry(DIMMER)
+    await setup(hass, entry)
+    coord = entry.runtime_data
+    send.side_effect = answering(
+        coord,
+        lambda p: [(0xDF73, "0080ff1100004d4f44424333d8"), (0x9640, "0080ff110000474438333532c3")]
+        if p[:4] == bytes.fromhex("0000ff10") else [],
+    )
+    with patch("custom_components.sg_csrmesh.provision.discover", AsyncMock(return_value=[])):
+        r = await hass.config_entries.options.async_init(entry.entry_id)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"next_step_id": "add_new"}
+        )
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {})
+        await hass.async_block_till_done(wait_background_tasks=True)
+        if r["type"] is FlowResultType.SHOW_PROGRESS:
+            r = await hass.config_entries.options.async_configure(r["flow_id"])
+    assert r["step_id"] == "add_new_pick"
+    field = next(f for f in r["data_schema"].schema if f == "device")
+    options = r["data_schema"].schema[field].config["options"]
+    assert options == [{"value": "mesh:df73", "label": "MODBC3 · DF73"}]  # 9640 is in HA already
+    r = await hass.config_entries.options.async_configure(
+        r["flow_id"], {"device": "mesh:df73", "name": "", "model": "MicroPill"}
+    )
+    assert r["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["devices"]["df73"] == {
+        "name": "MODBC3", "kind": "dimmer", "model": "MicroPill", "area_id": None, "tag": "0000"
+    }

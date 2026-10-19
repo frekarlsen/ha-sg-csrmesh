@@ -73,7 +73,15 @@ from .migrate import (
     gateway_devices,
     identify,
 )
-from .models import MODEL_CHOICES, MODELS, PANEL_TWO, PANELS, ROCKERS, models_of_kind
+from .models import (
+    MODEL_CHOICES,
+    MODELS,
+    PANEL_TWO,
+    PANELS,
+    ROCKERS,
+    model_from_name,
+    models_of_kind,
+)
 
 CONF_AREA = "area_id"
 CONF_HOMEKIT = "homekit_device"
@@ -354,13 +362,30 @@ class SGOptionsFlow(OptionsFlowWithReload):
             return await self.async_step_add_new_scan()
         return self.async_show_form(step_id="add_new", data_schema=vol.Schema({}))
 
-    async def async_step_add_new_scan(self, user_input=None) -> ConfigFlowResult:
+    _unplaced: dict[int, str] | None = None
+
+    async def _search(self) -> list:
+        """Both kinds of new device, at once.
+
+        * factory reset (no network key): association search (MASP);
+        * removed from the SG gateway (key kept, no location): name query,
+          as the SG app does. These are added by address, without a key
+          exchange.
+        """
         from .provision import discover
 
+        coord = self._coordinator
+        known = {int(k, 16) for k in self.config_entry.options.get(CONF_DEVICES, {})}
+        new, unplaced = await asyncio.gather(
+            discover(coord.link), coord.async_find_unplaced()
+        )
+        self._unplaced = {a: n for a, n in unplaced.items() if a not in known}
+        return new
+
+    async def async_step_add_new_scan(self, user_input=None) -> ConfigFlowResult:
         if self._task is None:
-            self._task = self.hass.async_create_task(
-                discover(self._coordinator.link), "sg_csrmesh discover"
-            )
+            self._unplaced = {}
+            self._task = self.hass.async_create_task(self._search(), "sg_csrmesh discover")
         if not self._task.done():
             return self.async_show_progress(
                 step_id="add_new_scan", progress_action="scan", progress_task=self._task
@@ -460,13 +485,25 @@ class SGOptionsFlow(OptionsFlowWithReload):
             self.hass.async_create_task(coord.link.pin(None), "sg_csrmesh unpin")
 
     async def async_step_add_new_pick(self, user_input=None) -> ConfigFlowResult:
-        if not self._new_list:
+        unplaced = self._unplaced or {}
+        if not self._new_list and not unplaced:
             return await self.async_step_add_new_none()
         if user_input and "device" in user_input:
-            self._new_choice = next(
-                d for d in self._new_list if f"{d.uuid_hash:08x}" == user_input["device"]
-            )
             model = MODELS[user_input[CONF_MODEL]]
+            choice = user_input["device"]
+            if choice.startswith("mesh:"):
+                # Already in the mesh: no key exchange, just its address.
+                self._found = int(choice.removeprefix("mesh:"), 16)
+                self._new_cfg = {
+                    "name": user_input["name"].strip() or unplaced.get(self._found, choice),
+                    CONF_KIND: model.kind.value,
+                    CONF_MODEL: model.key,
+                    CONF_AREA: user_input.get(CONF_AREA),
+                }
+                return await self.async_step_add_new_save()
+            self._new_choice = next(
+                d for d in self._new_list if f"{d.uuid_hash:08x}" == choice
+            )
             self._new_cfg = {
                 "name": user_input["name"].strip() or self._new_choice.mac,
                 CONF_KIND: model.kind.value,
@@ -476,8 +513,13 @@ class SGOptionsFlow(OptionsFlowWithReload):
             self._task = None
             return await self.async_step_add_new_run()
         options = [
-            SelectOptionDict(value=f"{d.uuid_hash:08x}", label=d.label) for d in self._new_list
+            SelectOptionDict(value=f"mesh:{a:04x}", label=f"{n} · {a:04X}")
+            for a, n in sorted(unplaced.items())
+        ] + [
+            SelectOptionDict(value=f"{d.uuid_hash:08x}", label=d.label) for d in self._new_list or []
         ]
+        names = list(unplaced.values())
+        default_model = (len(options) == 1 and names and model_from_name(names[0])) or MODEL_CHOICES[0]
         from homeassistant.helpers.selector import AreaSelector
 
         return self.async_show_form(
@@ -487,12 +529,12 @@ class SGOptionsFlow(OptionsFlowWithReload):
                     vol.Required("device", default=options[0]["value"]): SelectSelector(
                         SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
                     ),
-                    vol.Required("name"): TextSelector(),
-                    vol.Required(CONF_MODEL, default=MODEL_CHOICES[0]): _model_selector(),
+                    vol.Optional("name", default=""): TextSelector(),
+                    vol.Required(CONF_MODEL, default=default_model): _model_selector(),
                     vol.Optional(CONF_AREA): AreaSelector(),
                 }
             ),
-            description_placeholders={"count": str(len(self._new_list))},
+            description_placeholders={"count": str(len(options))},
         )
 
     async def async_step_add_new_run(self, user_input=None) -> ConfigFlowResult:

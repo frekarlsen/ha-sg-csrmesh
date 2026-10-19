@@ -87,14 +87,14 @@
       },
       "add_new": {
         "title": "Legg til ny enhet",
-        "description": "Sett strøm på den nye enheten (batteribryter: trykk på en knapp for å vekke den), og hold den nær en eksisterende SG Gen1-enhet. HA melder den inn i nettverket ditt med nettverks-PIN, uten SG-gatewayen. Trykk Send for å søke."
+        "description": "Finner to typer enheter: fabrikkresatte (sett strøm på enheten; en batteribryter vekkes med et knappetrykk), og enheter som er fjernet fra SG-gatewayen, som blir værende i nettverket uten rom. Hold en fabrikkresatt enhet nær en eksisterende SG Gen1-enhet. SG-gatewayen er ikke involvert. Trykk Send for å søke."
       },
       "add_new_pick": {
-        "title": "Fant {count} ny(e) enhet(er)",
-        "description": "Enhetene vises med Bluetooth-adressen (står på etiketten på noen).",
+        "title": "Fant {count} enhet(er)",
+        "description": "Oppføringer med mesh-adresse (for eksempel MODBC3 · DF73) er allerede i nettverket, typisk fjernet fra SG-gatewayen: de legges til med en gang. Oppføringer med Bluetooth-adresse er fabrikkresatt og får nettverksnøkkelen nå (opptil ett minutt). Navnet som vises er enhetens eget: typen og slutten av Bluetooth-adressen, som i SG-appen.",
         "data": {
           "device": "Enhet",
-          "name": "Navn",
+          "name": "Navn (valgfritt)",
           "area_id": "Rom",
           "model": "Modell"
         },

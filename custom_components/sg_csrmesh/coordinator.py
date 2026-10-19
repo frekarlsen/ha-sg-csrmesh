@@ -88,9 +88,11 @@ from .csrmesh.settings import (
     TrimLevels,
     fading_cmd,
     firmware_get_cmd,
+    name_query_cmd,
     parse_ack,
     parse_battery,
     parse_firmware,
+    parse_name,
     parse_trim,
     push_switch_cmd,
     switch_awake_cmd,
@@ -122,6 +124,7 @@ MAX_ROUNDS = 3
 RESYNC_DELAY = 1.5     # s; re-read a device after it was used by hand
 RESET_SETTLE = 2.0     # s after disassociate before checking it is gone
 REQUEST_WAIT = 1.5       # s for an answer before a command is sent again
+NAME_QUERY_TIME = 4.0    # s to collect name answers from devices without a location
 SWITCH_ACK_SETTLE = 1.0  # s after a switch configuration for the last acks
 SWITCH_TIMEOUT = 120.0   # s the user has to press the switch while configuring it
 
@@ -812,6 +815,30 @@ class MeshCoordinator:
             remove()
             if not answer.done():
                 answer.cancel()
+
+    async def async_find_unplaced(self, seconds: float | None = None) -> dict[int, str]:
+        """Devices in the mesh with no location (tag 00 00): address -> name.
+
+        As the SG app does: FF10 to everyone with tag 00 00. A device the SG
+        gateway removed answers this; it still has the network key, so it is
+        added by its address, without association.
+        """
+        seconds = NAME_QUERY_TIME if seconds is None else seconds
+        found: dict[int, str] = {}
+
+        def watch(msg: Message) -> None:
+            if msg.dest == ADDR_APP and msg.tag == NO_TAG and (name := parse_name(msg)):
+                found[msg.source] = name
+
+        remove = self.add_observer(watch)
+        try:
+            for _ in range(2):
+                await self.link.send(seal(self.key, name_query_cmd()))
+                await asyncio.sleep(seconds / 2)
+        finally:
+            remove()
+        _LOGGER.info("name query: %s", {f"{a:04x}": n for a, n in found.items()} or "no answer")
+        return found
 
     # --- dimmer settings ----------------------------------------------------
 

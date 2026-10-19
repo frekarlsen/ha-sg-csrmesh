@@ -87,14 +87,14 @@
       },
       "add_new": {
         "title": "Add a new device",
-        "description": "Power the new device (a battery switch: press a button to wake it) and keep it close to an existing SG Gen1 device. HA joins it to your network with the network PIN; the SG gateway is not involved. Click Submit to search."
+        "description": "Finds two kinds of device: factory reset ones (power the device; a battery switch: press a button to wake it), and devices removed from the SG gateway, which stay in your network without a room. Keep a factory reset device close to an existing SG Gen1 device. The SG gateway is not involved. Click Submit to search."
       },
       "add_new_pick": {
-        "title": "Found {count} new device(s)",
-        "description": "Devices are listed by their Bluetooth address (printed on some labels).",
+        "title": "Found {count} device(s)",
+        "description": "Entries with a mesh address (e.g. MODBC3 · DF73) are already in your network, typically removed from the SG gateway: they are added at once. Entries with a Bluetooth address are factory reset and get the network key now (up to a minute). The name shown is the device's own: its type and the end of its Bluetooth address, as in the SG app.",
         "data": {
           "device": "Device",
-          "name": "Name",
+          "name": "Name (optional)",
           "area_id": "Room",
           "model": "Model"
         },

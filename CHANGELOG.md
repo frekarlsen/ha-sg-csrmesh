@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0rc4 – 2026-10-19
+
+- **Devices removed from the SG gateway show up in "Add a new device".** Removing a device in the
+  gateway only clears its location: it keeps the network key, so it never answered the association
+  search (seen with a LEDDim Smart Pill Micro, `MODBC3` at DF73). The search now also asks every
+  device without a location for its name (FF10 → FF11, as the SG app does) and lists those with
+  their mesh address; picking one adds it at once, with no key exchange.
+- The name field is optional; a device found by name gets its own name (e.g. `MODBC3`).
+
 ## 0.7.0rc3 – 2026-10-19
 
 - **Add a device directly.** When the search through the mesh finds nothing, the dialog offers to

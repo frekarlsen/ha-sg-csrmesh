@@ -69,6 +69,15 @@ BUTTON_KEYS: dict[str, dict[int, str]] = {
 }
 
 
+# The type part of a node's name (@GD8352, FF11 "GD8352") -> model, where it
+# is confirmed on hardware. Only a default for the user's choice.
+NAME_PREFIX_MODEL = {"GD": "DimmerGen4"}
+
+
+def model_from_name(name: str | None) -> str | None:
+    return NAME_PREFIX_MODEL.get((name or "").lstrip("@")[:2].upper())
+
+
 def model_for(key: str | None) -> Model | None:
     return MODELS.get(key or "")
 
