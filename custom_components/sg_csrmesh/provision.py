@@ -151,19 +151,37 @@ class _QueuedAssociation(AssociationStateMachine):
         return self._answers.popleft()
 
 
-async def discover(link, seconds: float = 6.0) -> list[NewDevice]:
-    """Ask every unassociated CSRmesh device in reach to announce itself."""
+async def discover(link, seconds: float = 12.0, rounds: int = 4) -> list[NewDevice]:
+    """Ask every unassociated CSRmesh device in reach to announce itself.
+
+    Goes out through the node the link is connected to: relayed by the mesh,
+    or answered by that node itself if it is the factory reset device (see
+    ``MeshLink.pin``). Logs what it heard, as the search replaces the capture
+    tool's raw logging while it runs.
+    """
     results: list[dict] = []
-    link.set_raw_sink(lambda raw: _process_discovery_packet(raw, MASP_KEY, results))
+    heard: list[str] = []
+
+    def sink(raw: bytes) -> None:
+        payload, ok = verify_packet_mac(raw, MASP_KEY)
+        if ok and payload:
+            heard.append(f"{xor_masp_packet(payload[:1])[0]:02x}")
+        _process_discovery_packet(raw, MASP_KEY, results)
+
+    link.set_raw_sink(sink)
     try:
         announce = bytearray(18)
         announce[0] = MaspOpcode.DEVICE_ID_ANNOUNCE
         announce[6:14] = DEFAULT_SEQ_ID
-        for _ in range(2):
+        for _ in range(rounds):
             await _write_masp(link, xor_masp_packet(bytes(announce)))
-            await asyncio.sleep(seconds / 2)
+            await asyncio.sleep(seconds / rounds)
     finally:
         link.set_raw_sink(None)
+    _LOGGER.info(
+        "search via %s: %d MASP packet(s) heard (opcodes %s), %d new device(s)",
+        link.bridge_address, len(heard), ",".join(sorted(set(heard))) or "-", len(results),
+    )
     return [NewDevice(bytes(r["uuid"]), r["uuid_hash"]) for r in results]
 
 

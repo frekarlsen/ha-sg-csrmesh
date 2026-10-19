@@ -104,9 +104,10 @@
       },
       "add_new_none": {
         "title": "Fant ingen nye enheter",
-        "description": "Ingen svarte. Er enheten fabrikkresatt og strømsatt, og er en batteribryter vekket? Noen enheter tar bare imot innmelding i noen minutter etter strømpåslag.",
+        "description": "Ingenting svarte på søket gjennom meshen. Er enheten fabrikkresatt og har strøm? Ser SG-appen den, kan du koble direkte til den: søket gjennom meshen når ikke alle enheter.",
         "menu_options": {
           "add_new": "Søk igjen",
+          "add_new_direct": "Koble direkte til enheten",
           "init": "Tilbake"
         }
       },
@@ -162,6 +163,13 @@
       "pair_press": {
         "title": "Trykk på {switch}",
         "description": "Trykk Send, og trykk så kort på en knapp på bryteren. Den hører bare etter omtrent et sekund etter et trykk, så det trengs ofte to trykk: vent et par sekunder mellom dem. Det som ikke er bekreftet, sendes igjen ved neste trykk."
+      },
+      "add_new_direct": {
+        "title": "Koble direkte til en enhet",
+        "description": "Søket går gjennom meshen og når ikke alle enheter. Home Assistant kan i stedet koble seg direkte til den nye enheten gjennom Bluetooth-proxyen, slik SG-appen gjør fra telefonen. Velg den under: de fire siste tegnene i navnet er slutten av Bluetooth-adressen, og står også i navnet SG-appen viser (for eksempel DBC3). Mens dette pågår (opptil et par minutter), når ikke andre kommandoer ut i meshen.",
+        "data": {
+          "node": "Enhet"
+        }
       }
     },
     "error": {
@@ -176,7 +184,8 @@
       "scan": "Søker etter nye enheter …",
       "associate": "Melder {name} inn i nettverket (nøkkelutveksling, opptil ett minutt) …",
       "reset": "Tilbakestiller {name} …",
-      "pair": "Venter på {switch} … Trykk kort på en knapp. Det trengs ofte to trykk: vent et par sekunder etter hvert trykk til dette er ferdig."
+      "pair": "Venter på {switch} … Trykk kort på en knapp. Det trengs ofte to trykk: vent et par sekunder etter hvert trykk til dette er ferdig.",
+      "direct_scan": "Kobler til {name} og spør om den er klar til oppsett …"
     },
     "abort": {
       "not_loaded": "Integrasjonen er ikke lastet.",
@@ -194,7 +203,9 @@
       "no_matching_lights": "Ingen lys passer til {switch}. En bryter kan bare styre lys som er satt opp på samme måte: begge flyttet fra SG-gatewayen, eller begge lagt til av Home Assistant (fabrikkresatt og lagt til som ny).",
       "paired": "{switch} styrer nå {light}. Prøv bryteren: det virker uten Home Assistant.",
       "unpaired": "{switch} styrer ikke lenger {light}.",
-      "pair_failed": "{switch} ble ikke trykket på innen to minutter, eller bekreftet ikke. Home Assistants oversikt er ikke endret. Prøv igjen nær en Bluetooth-proxy."
+      "pair_failed": "{switch} ble ikke trykket på innen to minutter, eller bekreftet ikke. Home Assistants oversikt er ikke endret. Prøv igjen nær en Bluetooth-proxy.",
+      "direct_failed": "Kunne ikke koble direkte til {name}: {error}. Den kan være for langt unna Bluetooth-proxyen: prøv med en proxy nærmere, eller flytt enheten et øyeblikk.",
+      "no_nodes": "Ingen SG-enhet er synlig for Bluetooth-adapterne/proxyene akkurat nå."
     }
   },
   "selector": {

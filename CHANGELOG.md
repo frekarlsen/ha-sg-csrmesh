@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0rc3 – 2026-10-19
+
+- **Add a device directly.** When the search through the mesh finds nothing, the dialog offers to
+  connect to the new device itself (picked from the SG devices the Bluetooth proxies see, e.g.
+  `@MODBC3`), as the SG app does from a phone. The search and the key exchange then run on that
+  connection; afterwards the link goes back to the best node (at the latest after 10 minutes).
+- Fixed: a search that found nothing crashed the dialog (`UnknownStep: add_new_none`), since 0.6.
+- The search lasts 12 s (4 requests) and logs how many association packets it heard.
+
 ## 0.7.0rc2 – 2026-10-19
 
 - Pairing dialog: a rocker is done when the switch acknowledges the pairing (FF13). It only accepts

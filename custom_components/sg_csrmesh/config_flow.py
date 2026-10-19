@@ -375,7 +375,89 @@ class SGOptionsFlow(OptionsFlowWithReload):
 
     async def async_step_add_new_none(self, user_input=None) -> ConfigFlowResult:
         """Nothing answered the search. (HA needs a handler for every step id.)"""
-        return self.async_show_menu(step_id="add_new_none", menu_options=["add_new", "init"])
+        await self._unpin()
+        return self.async_show_menu(
+            step_id="add_new_none", menu_options=["add_new", "add_new_direct", "init"]
+        )
+
+    # A device the mesh search cannot reach is set up directly, as the SG app
+    # does from a phone: the link connects to the device itself, which then
+    # answers the search and the key exchange on its own connection.
+
+    _direct_name: str | None = None
+    _direct_address: str | None = None
+
+    async def async_step_add_new_direct(self, user_input=None) -> ConfigFlowResult:
+        """Pick a node seen by Bluetooth to connect to directly."""
+        if self._coordinator is None:
+            return self.async_abort(reason="not_loaded")
+        nodes = self._coordinator.link.visible_nodes()
+        if not nodes:
+            return self.async_abort(reason="no_nodes")
+        if user_input is not None:
+            node = next((n for n in nodes if n.address == user_input["node"]), None)
+            if node is not None:
+                self._direct_name = node.name or node.address
+                self._direct_address = node.address
+                self._task = None
+                return await self.async_step_add_new_direct_scan()
+        options = [
+            SelectOptionDict(value=n.address, label=f"{n.name or n.address} · {n.rssi} dBm")
+            for n in nodes
+        ]
+        return self.async_show_form(
+            step_id="add_new_direct",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("node"): SelectSelector(
+                        SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)
+                    )
+                }
+            ),
+        )
+
+    async def _direct_search(self, address: str) -> list:
+        from .provision import discover
+
+        link = self._coordinator.link
+        await link.pin(address)
+        return await discover(link, seconds=8.0)
+
+    async def async_step_add_new_direct_scan(self, user_input=None) -> ConfigFlowResult:
+        if self._task is None:
+            self._task = self.hass.async_create_task(
+                self._direct_search(self._direct_address), "sg_csrmesh direct search"
+            )
+        if not self._task.done():
+            return self.async_show_progress(
+                step_id="add_new_direct_scan", progress_action="direct_scan",
+                progress_task=self._task, description_placeholders={"name": self._direct_name},
+            )
+        try:
+            self._new_list = self._task.result()
+        except Exception as err:  # noqa: BLE001 - shown to the user
+            self._error = str(err) or type(err).__name__
+            self._task = None
+            return self.async_show_progress_done(next_step_id="add_new_direct_failed")
+        self._task = None
+        return self.async_show_progress_done(next_step_id="add_new_pick")
+
+    async def async_step_add_new_direct_failed(self, user_input=None) -> ConfigFlowResult:
+        await self._unpin()
+        return self.async_abort(
+            reason="direct_failed",
+            description_placeholders={"name": self._direct_name or "?", "error": self._error},
+        )
+
+    async def _unpin(self) -> None:
+        if (coord := self._coordinator) is not None and coord.link.pinned:
+            await coord.link.pin(None)
+
+    @callback
+    def async_remove(self) -> None:
+        """The dialog was closed: never leave the link on a chosen node."""
+        if (coord := self._coordinator) is not None and coord.link.pinned:
+            self.hass.async_create_task(coord.link.pin(None), "sg_csrmesh unpin")
 
     async def async_step_add_new_pick(self, user_input=None) -> ConfigFlowResult:
         if not self._new_list:
@@ -431,6 +513,7 @@ class SGOptionsFlow(OptionsFlowWithReload):
                 progress_task=self._task,
                 description_placeholders={"name": self._new_cfg["name"]},
             )
+        await self._unpin()
         try:
             self._found = self._task.result()
         except Exception as err:  # noqa: BLE001 - shown to the user

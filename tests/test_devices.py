@@ -293,3 +293,75 @@ async def test_add_new_nothing_found_shows_menu(hass: HomeAssistant, send):
             r["flow_id"], {"next_step_id": "add_new"}
         )
         assert r["step_id"] == "add_new"
+
+
+async def test_add_new_directly(hass: HomeAssistant, send):
+    """A device the mesh search cannot reach: connect to it, search and associate there."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from homeassistant.data_entry_flow import FlowResultType
+
+    from custom_components.sg_csrmesh.provision import NewDevice
+
+    entry = make_entry()
+    await setup(hass, entry)
+    link = entry.runtime_data.link
+    node = SimpleNamespace(name="@MODBC3", address="00:01:B3:13:DB:C3", rssi=-93)
+    pill = NewDevice(bytes(10) + bytes.fromhex("c3db13b30100"), 0x1234ABCD)
+    assert pill.mac == "00:01:B3:13:DB:C3"
+    pin = AsyncMock()
+    with (
+        patch.object(type(link), "visible_nodes", lambda self, **kw: [node]),
+        patch.object(type(link), "pin", pin),
+        patch.object(type(link), "pinned", property(lambda self: "00:01:B3:13:DB:C3")),
+        patch("custom_components.sg_csrmesh.provision.discover", AsyncMock(side_effect=[[], [pill]])),
+        patch("custom_components.sg_csrmesh.provision.associate", AsyncMock(return_value=0x8765)),
+    ):
+        r = await hass.config_entries.options.async_init(entry.entry_id)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"next_step_id": "add_new"}
+        )
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {})
+        await hass.async_block_till_done(wait_background_tasks=True)
+        r = await hass.config_entries.options.async_configure(r["flow_id"])
+        assert r["step_id"] == "add_new_none"
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"next_step_id": "add_new_direct"}
+        )
+        assert r["step_id"] == "add_new_direct"
+        async def settle(r):
+            # A finished task makes HA go straight on to the next step.
+            while r["type"] is FlowResultType.SHOW_PROGRESS:
+                await hass.async_block_till_done(wait_background_tasks=True)
+                r = await hass.config_entries.options.async_configure(r["flow_id"])
+            return r
+
+        r = await settle(await hass.config_entries.options.async_configure(
+            r["flow_id"], {"node": "00:01:B3:13:DB:C3"}
+        ))
+        assert r["step_id"] == "add_new_pick"
+        r = await settle(await hass.config_entries.options.async_configure(
+            r["flow_id"], {"device": "1234abcd", "name": "Pille", "model": "MicroPill"}
+        ))
+        assert r["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["devices"]["8765"]["model"] == "MicroPill"
+    assert entry.options["devices"]["8765"]["tag"] == "0000"
+    calls = [c.args[-1] for c in pin.await_args_list]
+    assert "00:01:B3:13:DB:C3" in calls
+    assert calls[-1] is None  # released after the key exchange
+
+
+async def test_pinned_link_uses_only_that_node(hass: HomeAssistant, send):
+    from custom_components.sg_csrmesh.bridge import NoMeshNodeError
+
+    entry = make_entry()
+    await setup(hass, entry)
+    link = entry.runtime_data.link
+    link._pinned = "00:01:B3:13:DB:C3"
+    target = "custom_components.sg_csrmesh.bridge.bluetooth.async_ble_device_from_address"
+    with patch(target, return_value=None), pytest.raises(NoMeshNodeError):
+        link._candidates()
+    device = object()
+    with patch(target, return_value=device):
+        assert link._candidates() == [device]

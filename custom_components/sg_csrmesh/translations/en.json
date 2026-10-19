@@ -104,9 +104,10 @@
       },
       "add_new_none": {
         "title": "No new devices found",
-        "description": "Nothing answered. Is the device factory reset and powered, and a battery switch awake? Some devices only accept joining for a few minutes after power-up.",
+        "description": "Nothing answered the search through the mesh. Is the device factory reset and powered? If the SG app can see it, connect to it directly: the search through the mesh does not reach every device.",
         "menu_options": {
           "add_new": "Search again",
+          "add_new_direct": "Connect directly to the device",
           "init": "Back"
         }
       },
@@ -162,6 +163,13 @@
       "pair_press": {
         "title": "Press {switch}",
         "description": "Click Submit, then briefly press any button on the switch. It only listens for about a second after a press, so it often takes two presses: wait a couple of seconds between them. Whatever is not confirmed is sent again at the next press."
+      },
+      "add_new_direct": {
+        "title": "Connect directly to a device",
+        "description": "The search goes out through the mesh and does not reach every device. Home Assistant can instead connect to the new device itself through the Bluetooth proxy, as the SG app does from a phone. Pick it below: the last four characters of the name are the end of its Bluetooth address and also appear in the name the SG app shows (for example DBC3). While this runs (up to a minute or two), other commands do not reach the mesh.",
+        "data": {
+          "node": "Device"
+        }
       }
     },
     "error": {
@@ -176,7 +184,8 @@
       "scan": "Searching for new devices …",
       "associate": "Joining {name} to the network (key exchange, up to a minute) …",
       "reset": "Resetting {name} …",
-      "pair": "Waiting for {switch} … Press any button briefly. It often takes two presses: wait a couple of seconds after each until this finishes."
+      "pair": "Waiting for {switch} … Press any button briefly. It often takes two presses: wait a couple of seconds after each until this finishes.",
+      "direct_scan": "Connecting to {name} and asking whether it is ready to be added …"
     },
     "abort": {
       "not_loaded": "The integration is not loaded.",
@@ -194,7 +203,9 @@
       "no_matching_lights": "No light fits {switch}. A switch can only control lights set up the same way: both moved from the SG gateway, or both added by Home Assistant (factory reset and added as new).",
       "paired": "{switch} now controls {light}. Try it: it works without Home Assistant.",
       "unpaired": "{switch} no longer controls {light}.",
-      "pair_failed": "{switch} was not pressed within two minutes, or did not confirm. Home Assistant's record is unchanged. Try again close to a Bluetooth proxy."
+      "pair_failed": "{switch} was not pressed within two minutes, or did not confirm. Home Assistant's record is unchanged. Try again close to a Bluetooth proxy.",
+      "direct_failed": "Could not connect directly to {name}: {error}. It may be too far from the Bluetooth proxy: try with a proxy closer to it, or move the device for a moment.",
+      "no_nodes": "No SG device is visible to the Bluetooth adapters/proxies right now."
     }
   },
   "selector": {

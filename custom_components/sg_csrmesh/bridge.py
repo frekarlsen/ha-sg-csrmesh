@@ -65,6 +65,10 @@ class MeshLink:
         self._client: BleakClientWithServiceCache | None = None
         self._address: str | None = None
         self._quarantine: dict[str, float] = {}
+        # A node chosen by hand (association of a device the mesh cannot
+        # reach): used instead of the best node until released.
+        self._pinned: str | None = None
+        self._pin_timer: asyncio.TimerHandle | None = None
         self._raw_sink: Callable[[bytes], None] | None = None
         self._raw_head: bytes | None = None
         self._raw_timer: asyncio.TimerHandle | None = None
@@ -117,6 +121,16 @@ class MeshLink:
 
     def _candidates(self) -> list[BLEDevice]:
         """Nodes to try, best first; current bridge kept unless clearly beaten."""
+        if self._pinned:
+            device = bluetooth.async_ble_device_from_address(
+                self._hass, self._pinned, connectable=True
+            )
+            if device is None:
+                raise NoMeshNodeError(
+                    f"{self._pinned} is not advertising within reach of a connectable "
+                    "Bluetooth adapter/proxy"
+                )
+            return [device]
         now = time.monotonic()
         self._quarantine = {a: t for a, t in self._quarantine.items() if t > now}
         nodes = [n for n in self.visible_nodes() if n.address not in self._quarantine]
@@ -255,6 +269,34 @@ class MeshLink:
                     CHAR_8003 if char == "8003" else CHAR_8004, chunk, response=False
                 )
 
+    @property
+    def pinned(self) -> str | None:
+        return self._pinned
+
+    async def pin(self, address: str | None, hold: float = 600.0) -> None:
+        """Connect to ``address`` and stay there (``None``: back to the best node).
+
+        Used to associate a factory reset device directly, as the SG app does
+        from a phone: the device answers on its own connection. Released by
+        itself after ``hold`` seconds, so a forgotten pin cannot strand the link.
+        """
+        if self._pin_timer:
+            self._pin_timer.cancel()
+            self._pin_timer = None
+        async with self._lock:
+            self._pinned = address
+            if self.connected and self._address != address:
+                await self.disconnect()
+            if address is not None:
+                self._quarantine.pop(address, None)
+                await self._ensure()
+                self._pin_timer = self._hass.loop.call_later(
+                    hold,
+                    lambda: self._hass.async_create_task(self.pin(None), "sg_csrmesh unpin"),
+                )
+        if address is None:
+            self._dropped.set()  # the keeper reconnects to the best node
+
     def _disconnected(self, _client) -> None:
         _LOGGER.debug("mesh link dropped")
         self._client = None
@@ -289,6 +331,9 @@ class MeshLink:
 
     async def stop(self) -> None:
         self._stopping = True
+        if self._pin_timer:
+            self._pin_timer.cancel()
+            self._pin_timer = None
         self._dropped.set()
         if self._keeper:
             self._keeper.cancel()
