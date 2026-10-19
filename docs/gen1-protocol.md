@@ -138,7 +138,8 @@ ukjent, men den har trim, og da er den ikke en eldre `Dimmer`. Lampen var av.
   taggen.
 - **Trykkbryter normal, kvittert.** Sendt `4096ff47000000`, og svaret var `ff08 0000 47 00`. Kvitteringen
   gjentar valget. Det er ingen synlig endring, fordi normal trolig var fabrikkverdien.
-**17.–19.10.2026: bryterparing, `c3e4` «trykkbryter_01» → `9640`. Ikke lykkes ennå.**
+**17.–19.10.2026: bryterparing, `c3e4` «trykkbryter_01» → `9640`, første forsøk (ikke lykkes; se
+løsningen lenger ned).**
 `c3e4` er lagt til fra HA (tag `0000`), og modellen er ukjent. Venstre side ble brukt, og
 automasjonen var slått av under testen.
 
@@ -219,9 +220,75 @@ Tidene er regnet fra bryterens første ramme.
   før `FF13` er med som i appen. Om den er nødvendig, er ikke testet.
 - Kommandoen fra bryteren til dimmeren (trolig `FF0A`) ble ikke fanget av HA denne gangen.
 
+**19.10.2026: bryter med tag `0000` → lampe med tag `e7a4`. Virker ikke.**
+`c3e4` (lagt til fra HA, tag `0000`), høyre vippe (BTN `03`), mål Lys Nattbord `89e0` (MicroPillGen4,
+på gatewayen, tag `e7a4`). Lampen var av.
+
+| Tid | Ramme | Betyr |
+|---|---|---|
+| 11:40:05 | sendt `e4c3 ff12 0000 01 25`, `ff17 0000 03 26`, `ff13 0000 03 00 89e0 00 27`, `ff12 0000 00 28` (+0,47 / 0,83 / 1,08 / 1,55 s) | paring |
+| | `ff08 0000 12`, `ff08 0000 17 03`, `ff08 0000 13 03 00`, `ff08 0000 12` | alt kvittert |
+| 11:45:46 | `c3e4 → 89e0 ff03 0000 01 00 92` (×3), så `ff15 0000 03 01 01` | øverst høyre: bryteren sender **«på»** |
+| 11:45:48 | `89e0 → 8000 ff05 e7a4 00 10 …` | lampen fortsatt av |
+| 11:45:52 | `c3e4 → 89e0 ff03 0000 00 00 93` (×3), så `ff15 0000 02 01 01` | nederst høyre: **«av»** |
+
+- **Lampen overså kommandoen.** Bryteren sender med sin egen tag, og lampen hører bare på sin. En
+  bryter kan bare styre enheter med samme tag. Paring i HA må derfor bare tilby mål med samme tag som
+  bryteren. Gatewayenhetene skal uansett flyttes over til HA.
+- **`c3e4` styrer med `FF03`** (`<tag> PWR LEVEL TID`, nivå `00` = siste nivå?) og sender kommandoen
+  *før* `FF15`. `99bc` brukte `FF0A`. De to bryterne er trolig ulike generasjoner, som også `FF15`-kroppen
+  tyder på (`BTN 01 01` mot `BTN 00 09`).
+- Knappene i `FF15` er 0 = øverst venstre, 1 = nederst venstre, 2 = nederst høyre, 3 = øverst høyre.
+
+**19.10.2026: fjerne paring, verifisert. `FF17` alene.**
+Ved trykk øverst høyre (11:49:07, bryteren sendte fortsatt `ff03` til `89e0`):
+
+| Tid | Sendt | Kvittering |
+|---|---|---|
+| +0,72 s | `e4c3 ff12 0000 01 29` | `ff08 0000 12` |
+| +1,20 s | `e4c3 ff17 0000 03 2a` | `ff08 0000 17 03` |
+| +1,68 s | `e4c3 ff12 0000 00 2b` | `ff08 0000 12` |
+
+- Etterpå (11:49:20 øverst høyre, 11:49:26 nederst høyre) sendte bryteren bare `ff15`, `ff07` og
+  batteristatus, ikke noe `ff03`. **`FF17 03` fjerner hele høyre vippe.** Knappen gir fortsatt
+  hendelser i HA.
+
 - Feil i verktøyet: når to `capture` overlapper, slår den første av loggingen for den andre når den
   avslutter. Rettet i `coordinator.py`.
 - Til sammenligning svarte `9640` på `FF05` med `0080 ff05 0000 00 64 00 01 02 1a 00` (av, nivå 100).
+
+**19.10.2026: HeatReg Smart (`ThermostatGen3`), verifisert.** Tre termostater på gatewayen (tag
+`e7a4`): `808c` Varmekabler Bad (fastvare 52.0), `8505` Varmekabler Kjellerstue (53.2) og `f03f`
+Varmekabler Yttergang (53.2). Kryssjekket mot verdiene gatewayen viser i HomeKit.
+
+Gatewayen spør hver termostat omtrent hvert 20. sekund:
+
+| Spørsmål | Svar | Innhold (etter taggen) |
+|---|---|---|
+| `FF04` | `FF05 F SP SPd FWa FWb X Y` | F = flagg, SP + SPd/10 = **ønsket temperatur**, FWa.FWb = fastvare |
+| `FF3C 00` | `FF3D Ra Rd Ga Gd Ma Md ..` | **romtemperatur** Ra + Rd/10, **gulvtemperatur** Ga + Gd/10, **maks gulv** Ma + Md/10 |
+| `FF3C 01` | `FF5C ..` | kalibrering (offset rom/gulv), grunnvarme (varighet/prosent), NTC-type, adaptiv/åpent vindu |
+
+- Eksempel `808c`: `ff05 e7a4 91 1c 00 34 00 30 00` = 28,0 °C, fastvare 52.0. `ff3d e7a4 15 03 1b 08 1e
+  00 00` = rom 21,3 °C, gulv 27,8 °C, maks gulv 30,0 °C. HomeKit viste 28 og 27,8.
+- **Flagg (byte 0):** bit 0 = på, bit 5 = **varmer nå** (reléet er på). `8505` sendte `b1` mens HomeKit
+  viste «heating», de andre `91` («idle»). Bit 4 og 7 er satt på alle tre, betydning ukjent.
+- HomeKit viser gulvtemperaturen som nåværende temperatur på alle tre. Appen velger rom eller gulv
+  etter sensormodus (`ambient` 0, `floor` 1, `ambientAndFloor` 2), men den lagres i appen og står ikke i
+  statusen. Integrasjonen viser gulv, og begge som egne sensorer.
+
+| Kommando | Opkode | Data | Svar |
+|---|---|---|---|
+| Ønsket temperatur | `FF3E` | `INT TIENDEDEL 01 TID` | `FF08 3E`. **Verifisert** |
+| Av / på | `FF42` | `PWR 00 TID` | ses i `FF05` bit 0. **Verifisert** |
+| Les temperaturer | `FF3C` | `00` (temperaturer) / `01` (innstillinger) | `FF3D` / `FF5C` |
+
+- Gatewayen (via HomeKit, 24 → 24,5): `3ff0 ff3e e7a4 18 05 01 00` → `ff08 e7a4 3e`, og neste `FF05` viste
+  `18 05`.
+- Fra HA direkte: `3ff0ff3ee7a418000131` → `ff08 e7a4 3e`, `FF05` viste `18 00`. HomeKit fulgte etter ved
+  gatewayens neste spørsmål.
+- `3ff0ff42e7a4000032` (av) → `FF05` flagg `90`. `3ff0ff42e7a4010033` (på) → `91`. Ingen `FF08` ble sett for
+  `FF42`.
 
 ### 6.2 Plan
 
