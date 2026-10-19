@@ -38,7 +38,7 @@ Alle bytene står etter taggen.
 | Fading + dimmehastighet | `FF48` | `FADE SPEED` | FADE i tideler sekund. Appens valg: `00` av, `05`, `0A`, `14`, `1E` (RGBW-typer: bare `05` og `1E`). SPEED `00` normal, `01` rask | `FF08 48 FADE`. **Verifisert** 17.10.2026 (`1E` og `00`) |
 | Les fastvare | `FF5E` | – | | `FF5F A B C D E F G`. Appen viser `A.B.C/D.E.F/G`. **Verifisert** 17.10.2026 |
 | Bryter: hold deg våken / sov | `FF12` | `AWAKE TID` | `01` våken (før oppsett), `00` sov (etter) | `FF08 12`. **Verifisert** 19.10.2026 |
-| Bryterknapp → enhet (Gen2-brytere) | `FF13` | `BTN TYPE MÅL_HI MÅL_LO 00 TID` | sendes **til bryteren**. TYPE `00` av/på-par, `07` dimming med én knapp, `08` CCT. MÅL er big-endian | `FF08 13 BTN TYPE`?, se punkt 5 |
+| Bryterknapp → enhet (Gen2-brytere), **verifisert** 19.10.2026 | `FF13` | `BTN TYPE MÅL_HI MÅL_LO 00 TID` | sendes **til bryteren**. TYPE `00` av/på-par, `07` dimming med én knapp, `08` CCT. MÅL er big-endian | `FF08 13 BTN TYPE`?, se punkt 5 |
 | Bryterknapp → enhet (V1-brytere) | `FF14` | `A B 00 MÅL_HI MÅL_LO 00` | Gammel Smart Switch (type `SmartSwitch`) | – |
 | Nullstill bryterknapp | `FF17` | `BTN X` | | – |
 
@@ -196,6 +196,28 @@ til HA, regnet fra bryterens første ramme.
 - `FF15` fra `99bc` har kroppen `03 00 09`, mens `c3e4` sender `BTN 01 01`. Forskjellen er ikke forstått.
 - Under fangsten sendte telefonappen også `0000 ff10 0000` (navnespørring til alle med tag `0000`)
   hvert 4. sekund. `9640` svarte `ff11 0000 "GD8352" c3`, altså sitt navn i ASCII.
+
+**19.10.2026: bryterparing fra HA, verifisert. `c3e4` → `9640`.**
+Sendt med 0.6.3rc1 med `send_on_press` (`repeats: 1, gap: 0`) ved trykk på øverst venstre.
+Tidene er regnet fra bryterens første ramme.
+
+| Tid | Sendt | Kvittering |
+|---|---|---|
+| +0,48 s | `e4c3 ff12 0000 01 11` | `ff08 0000 12` |
+| +1,20 s | `e4c3 ff17 0000 00 12` | `ff08 0000 17 00` |
+| +1,68 s | `e4c3 ff13 0000 00 00 9640 00 13` | `ff08 0000 13 00 00` |
+| +2,16 s | `e4c3 ff12 0000 00 14` | `ff08 0000 12` |
+
+- **Resultat:** Øverst venstre slår på `9640`, nederst venstre slår av, og hold dimmer opp og ned.
+  Det virker som oppsett fra SG-appen og trenger ikke HA. Dimmeren meldte selv `ff50 0000 01 64`
+  ved påslag.
+- **Én `FF13` konfigurerer hele vippen (venstre side).** BTN `00` er øverste knapp i paret, og bryteren
+  lager selv av/dim ned på knappen under. Det stemmer med appen, som sendte én `FF13` med BTN `03` for
+  «høyre knapp» på `99bc`. Tolkningen er at BTN er indeksen for øverste knapp, 0 for venstre og 3 for
+  høyre, med samme nummerering som `FF15`.
+- **Kravet er tempo:** våken, nullstill, sett og sov innen ca. 2 s etter trykket. Nullstilling (`FF17`)
+  før `FF13` er med som i appen. Om den er nødvendig, er ikke testet.
+- Kommandoen fra bryteren til dimmeren (trolig `FF0A`) ble ikke fanget av HA denne gangen.
 
 - Feil i verktøyet: når to `capture` overlapper, slår den første av loggingen for den andre når den
   avslutter. Rettet i `coordinator.py`.

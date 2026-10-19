@@ -135,3 +135,22 @@ def test_switch_frames_captured():
     bat = s.parse_battery(_msg(0xC3E4, "00008301641003"))
     assert bat == s.Battery(level=100, state=0x10, counter=3)
     assert s.parse_battery(_msg(0xC3E4, "0080ff150000000101")) is None
+
+
+def test_switch_pairing_sequence_verified():
+    """19.10.2026: this sequence paired c3e4's left rocker with 9640."""
+    tag = protocol.NO_TAG
+    seq = [
+        s.switch_awake_cmd(0xC3E4, True, 0x11, tag=tag),
+        s.switch_clear_cmd(0xC3E4, 0, 0x12, tag=tag),
+        s.switch_button_cmd(0xC3E4, 0, 0x9640, 0x13, tag=tag),
+        s.switch_awake_cmd(0xC3E4, False, 0x14, tag=tag),
+    ]
+    assert [m.hex() for m in seq] == [
+        "e4c3ff1200000111", "e4c3ff1700000012", "e4c3ff130000000096400013", "e4c3ff1200000014",
+    ]
+    assert s.parse_ack(_msg(0xC3E4, "0080ff0800001700")) == s.Ack(s.OP_SWITCH_CLEAR, b"\x00")
+    assert s.parse_ack(_msg(0xC3E4, "0080ff080000130000")) == s.Ack(s.OP_SWITCH_BUTTON, b"\x00\x00")
+    # The app's own command to 99bc (tag e7a4), captured the same day.
+    assert s.switch_button_cmd(0x99BC, 3, 0x89E0, 0x03).hex() == "bc99ff13e7a4030089e00003"
+    assert s.switch_clear_cmd(0x99BC, 3, 0x02).hex() == "bc99ff17e7a40302"

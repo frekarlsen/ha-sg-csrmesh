@@ -200,8 +200,8 @@ def parse_firmware(msg: Message) -> str | None:
 # Commands to a switch are only heard within about a second of a press.
 
 OP_SWITCH_AWAKE = 0xFF12   # <awake 01|00> <tid> -> FF08 12. Verified 19.10.2026
-OP_SWITCH_BUTTON = 0xFF13  # <btn> <type> <target BE> 00 <tid>. NOT accepted by c3e4 yet
-OP_SWITCH_CLEAR = 0xFF17   # <btn> <tid> -> FF08 17 <btn> (from the app, unverified)
+OP_SWITCH_BUTTON = 0xFF13  # <btn> <type> <target BE> 00 <tid> -> FF08 13 <btn> <type>. Verified
+OP_SWITCH_CLEAR = 0xFF17   # <btn> <tid> -> FF08 17 <btn>. Verified 19.10.2026
 OP_BATTERY = 0x83          # CSRmesh battery model; 01 = BATTERY_STATE
 
 
@@ -213,7 +213,14 @@ def switch_awake_cmd(mesh_id: int, awake: bool, tid: int, tag: bytes = SG_TAG) -
 def switch_button_cmd(
     mesh_id: int, button: int, target: int, tid: int, kind: int = 0, tag: bytes = SG_TAG
 ) -> bytes:
-    """FF13 as the app builds it (kind 00 on/off pair, 07 single-button dimming)."""
+    """FF13 as the app builds it.
+
+    One command configures a whole rocker: ``button`` is its top button
+    (0 left, 3 right, as in FF15); top turns on and dims up, bottom turns off
+    and dims down (kind 00). Kind 07 is single-button dimming (unverified).
+    Send it as wake (FF12 01), clear (FF17), FF13, sleep (FF12 00) within
+    about 2 s of a press.
+    """
     data = bytes([button, kind]) + target.to_bytes(2, "big") + bytes([0, tid & 0xFF])
     return ext_cmd(mesh_id, OP_SWITCH_BUTTON, tag, data)
 
@@ -231,3 +238,8 @@ def parse_battery(msg: Message) -> Battery | None:
     if msg.opcode != OP_BATTERY or len(b) < 4 or b[0] != 0x01:
         return None
     return Battery(b[1], b[2], b[3])
+
+
+def switch_clear_cmd(mesh_id: int, button: int, tid: int, tag: bytes = SG_TAG) -> bytes:
+    """FF17: clear one button (rocker) before setting it, as the app does."""
+    return ext_cmd(mesh_id, OP_SWITCH_CLEAR, tag, bytes([button, tid & 0xFF]))
