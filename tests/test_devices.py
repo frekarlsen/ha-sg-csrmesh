@@ -271,3 +271,25 @@ async def test_catch_up_asks_again_for_unknown_devices(hass: HomeAssistant, send
     coord._start_catch_up()
     await hass.async_block_till_done(wait_background_tasks=True)
     assert sent_payloads(send) == []  # everything known now
+
+
+async def test_add_new_nothing_found_shows_menu(hass: HomeAssistant, send):
+    """0.6-0.7rc2 crashed here: the menu's step had no handler (UnknownStep)."""
+    from homeassistant.data_entry_flow import FlowResultType
+
+    entry = make_entry()
+    await setup(hass, entry)
+    with patch("custom_components.sg_csrmesh.provision.discover", return_value=[]):
+        r = await hass.config_entries.options.async_init(entry.entry_id)
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"next_step_id": "add_new"}
+        )
+        r = await hass.config_entries.options.async_configure(r["flow_id"], {})
+        await hass.async_block_till_done(wait_background_tasks=True)
+        r = await hass.config_entries.options.async_configure(r["flow_id"])
+        assert r["type"] is FlowResultType.MENU and r["step_id"] == "add_new_none"
+        # The frontend fetches the current step again: must not raise.
+        r = await hass.config_entries.options.async_configure(
+            r["flow_id"], {"next_step_id": "add_new"}
+        )
+        assert r["step_id"] == "add_new"

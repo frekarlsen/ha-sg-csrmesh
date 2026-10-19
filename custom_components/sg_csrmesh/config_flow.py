@@ -373,9 +373,13 @@ class SGOptionsFlow(OptionsFlowWithReload):
         self._task = None
         return self.async_show_progress_done(next_step_id="add_new_pick")
 
+    async def async_step_add_new_none(self, user_input=None) -> ConfigFlowResult:
+        """Nothing answered the search. (HA needs a handler for every step id.)"""
+        return self.async_show_menu(step_id="add_new_none", menu_options=["add_new", "init"])
+
     async def async_step_add_new_pick(self, user_input=None) -> ConfigFlowResult:
         if not self._new_list:
-            return self.async_show_menu(step_id="add_new_none", menu_options=["add_new", "init"])
+            return await self.async_step_add_new_none()
         if user_input and "device" in user_input:
             self._new_choice = next(
                 d for d in self._new_list if f"{d.uuid_hash:08x}" == user_input["device"]
