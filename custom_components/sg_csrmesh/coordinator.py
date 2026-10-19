@@ -22,6 +22,7 @@ from homeassistant.helpers.event import async_call_later, async_track_time_inter
 from .bridge import MeshLink, NoMeshNodeError
 from .const import (
     CAPTURE_BUFFER,
+    CATCH_UP_DELAYS,
     CONF_DEVICES,
     CONF_FADING,
     CONF_KIND,
@@ -260,6 +261,7 @@ class MeshCoordinator:
         self._unsub_poll = None
         self._unsub_thermostats = None
         self._unsub_firmware = None
+        self._unsub_catch_up: list = []
         self._observers: list = []
         self._trim_reads: dict[int, asyncio.Task] = {}
 
@@ -279,9 +281,17 @@ class MeshCoordinator:
             )
         self.entry.async_create_background_task(self.hass, self._poll(), f"{DOMAIN} first poll")
         self._unsub_firmware = async_call_later(self.hass, FIRMWARE_DELAY, self._start_firmware_read)
+        # The first poll goes out while the link is still connecting, and
+        # answers right after a connect are sometimes lost: ask again soon
+        # for whatever is still unknown, instead of waiting a poll interval.
+        self._unsub_catch_up = [
+            async_call_later(self.hass, delay, self._start_catch_up) for delay in CATCH_UP_DELAYS
+        ]
 
     async def async_stop(self) -> None:
-        for unsub in (self._unsub_poll, self._unsub_thermostats, self._unsub_firmware):
+        for unsub in (
+            self._unsub_poll, self._unsub_thermostats, self._unsub_firmware, *self._unsub_catch_up
+        ):
             if unsub:
                 unsub()
         for task in self._trim_reads.values():
@@ -446,9 +456,23 @@ class MeshCoordinator:
         if self.device_cfg(mesh_id).get("sw_version") == version:
             return
         self.update_device_cfg(mesh_id, {"sw_version": version})
+        if device := self.registry_device(f"{mesh_id:04x}"):
+            dr.async_get(self.hass).async_update_device(device.id, sw_version=version)
+
+    def registry_device(self, hex_id: str) -> dr.DeviceEntry | None:
+        """This entry's registry device for a mesh address.
+
+        Looked up among the entry's own devices: identifiers are no longer
+        unique across config entries (``async_get_device`` is deprecated).
+        """
         dev_reg = dr.async_get(self.hass)
-        if device := dev_reg.async_get_device(identifiers={(DOMAIN, f"{mesh_id:04x}")}):
-            dev_reg.async_update_device(device.id, sw_version=version)
+        return next(
+            (
+                d for d in dr.async_entries_for_config_entry(dev_reg, self.entry.entry_id)
+                if (DOMAIN, hex_id) in d.identifiers
+            ),
+            None,
+        )
 
     # --- outbound ---------------------------------------------------------
 
@@ -618,6 +642,35 @@ class MeshCoordinator:
                     await self.link.send(seal(self.key, cmd), listen=POLL_SPACING)
             except Exception as err:  # noqa: BLE001
                 _LOGGER.debug("thermostat poll of %04x failed: %s", mesh_id, err)
+
+    @callback
+    def _start_catch_up(self, _now=None) -> None:
+        unknown = [
+            d.mesh_id for d in self.devices.values()
+            if d.kind != DeviceKind.SWITCH and (
+                d.on is None or (d.model_info and d.model_info.trim and d.trim is None)
+            )
+        ]
+        if unknown:
+            self.entry.async_create_background_task(
+                self.hass, self._catch_up(unknown), f"{DOMAIN} catch-up"
+            )
+
+    async def _catch_up(self, mesh_ids: list[int]) -> None:
+        for mesh_id in mesh_ids:
+            dev = self.devices[mesh_id]
+            try:
+                if dev.on is None:
+                    tag = self._tag(mesh_id)
+                    await self.link.send(seal(self.key, poll_cmd(mesh_id, tag)), listen=POLL_SPACING)
+                    if dev.kind == DeviceKind.THERMOSTAT:
+                        await self.link.send(
+                            seal(self.key, temperatures_get_cmd(mesh_id, tag)), listen=POLL_SPACING
+                        )
+                if dev.model_info and dev.model_info.trim and dev.trim is None:
+                    self.async_request_trim(mesh_id)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("catch-up of %04x failed: %s", mesh_id, err)
 
     @callback
     def _start_firmware_read(self, _now=None) -> None:

@@ -250,3 +250,24 @@ async def test_missing_model_repair(hass: HomeAssistant, send):
     assert entry.options["devices"]["ca67"]["model"] == "DimmerGen4"
     assert issues.async_get_issue(DOMAIN, "missing_model_ca67") is None
     assert hass.states.get("select.taklys_fading") is not None
+
+
+async def test_catch_up_asks_again_for_unknown_devices(hass: HomeAssistant, send):
+    """Answers right after a connect can be lost: unknown devices are asked again."""
+    entry = make_entry({**DIMMER, "c3e4": {"name": "Bryter", "kind": "switch", "tag": "0000"}})
+    await setup(hass, entry)
+    coord = entry.runtime_data
+    send.reset_mock()
+    coord._start_catch_up()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    sent = [p.hex() for p in sent_payloads(send)]
+    assert "4096ff040000" in sent and "4096ff2a0000" in sent
+    assert not any(p.startswith("e4c3") for p in sent)  # not the sleeping switch
+
+    inject(coord, 0x9640, "0080ff050000005b0001021a00")
+    inject(coord, 0x9640, "0080ff2b00003554320000", 2)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    send.reset_mock()
+    coord._start_catch_up()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert sent_payloads(send) == []  # everything known now

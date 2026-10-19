@@ -24,6 +24,7 @@ DEFAULT_POLL_INTERVAL = 300           # s; dimmers do not push changes
 DEFAULT_MIN_LEVEL = 10                # %; SG dimmers have a ~10 % floor
 THERMOSTAT_POLL = 60                  # s; thermostats are read this often
 FIRMWARE_DELAY = 15                   # s after start before firmware is read
+CATCH_UP_DELAYS = (20, 60, 150)       # s after start: ask devices still unknown again
 
 STATUS_LISTEN_TIME = 4.0
 CAPTURE_BUFFER = 2000

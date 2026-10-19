@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
@@ -39,8 +38,7 @@ def device_info(coordinator: MeshCoordinator, device: MeshDevice) -> DeviceInfo:
 
 def device_name(hass: HomeAssistant, coordinator: MeshCoordinator, hex_id: str) -> str:
     """The name the user sees for a mesh address: renames in HA win."""
-    dev_reg = dr.async_get(hass)
-    if entry := dev_reg.async_get_device(identifiers={(DOMAIN, hex_id)}):
+    if entry := coordinator.registry_device(hex_id):
         return entry.name_by_user or entry.name or hex_id.upper()
     if dev := coordinator.devices.get(int(hex_id, 16)):
         return dev.name
