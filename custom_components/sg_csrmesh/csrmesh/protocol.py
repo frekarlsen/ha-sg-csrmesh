@@ -195,6 +195,16 @@ def parse_switch_event(msg: Message) -> int | None:
     return button if button < BUTTONS else None
 
 
+# Smart Switch V2 (body ``BTN 00 08``/``BTN 00 09``) follows every short press
+# with ``02 00 08`` frames for ~7 s, whichever button was pressed (docs 6.6).
+V2_TAIL_BUTTON = 2
+
+
+def is_v2_switch_frame(msg: Message) -> bool:
+    """V2 switches send ``BTN 00 xx``; Gen4 (c3e4) sends ``BTN 01 01``."""
+    return len(msg.body) >= 2 and msg.body[1] == 0x00
+
+
 class FrameAssembler:
     """Rebuild frames from 8003/8004 notifications.
 

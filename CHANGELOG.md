@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0rc5 – 2026-10-20
+
+- **Fixed: ghost presses "bottom right" on Smart Switch V2.** After every short press, a V2 switch
+  (`FF15` body `BTN 00 08`, e.g. `MXCBB3`) keeps sending `02 00 08` for about 7 s, whatever button
+  was pressed. These follow-ups are now ignored for 8 s after a press. A real bottom-right press
+  within those 8 s is also ignored; Gen4 switches are not affected.
+
 ## 0.7.0rc4 – 2026-10-19
 
 - **Devices removed from the SG gateway show up in "Add a new device".** Removing a device in the

@@ -66,8 +66,10 @@ from .csrmesh.protocol import (
     OWN_TAG_DESTS,
     SG_TAG,
     STATUS_OPS,
+    V2_TAIL_BUTTON,
     DeviceKind,
     Message,
+    is_v2_switch_frame,
     parse_light_status,
     parse_message,
     parse_switch_event,
@@ -107,6 +109,7 @@ from .models import BUTTON_KEYS, PANEL_TWO, Model, model_for
 _LOGGER = logging.getLogger(__name__)
 
 PRESS_DEDUP = 3.0  # s; copies of one press arrive within this
+V2_TAIL = 8.0  # s; a V2 switch sends "button 2" frames this long after a press
 REPEAT_MIN, REPEAT_MAX = 32.0, 40.0  # s; a switch's own periodic repeat
 POLL_SPACING = 0.3  # s between per-device polls, like the gateway
 
@@ -382,6 +385,9 @@ class MeshCoordinator:
             return
         if (button := parse_switch_event(msg)) is None:
             return
+        if is_v2_switch_frame(msg) and self._is_v2_tail(dev, button):
+            _LOGGER.debug("%04x: ignoring V2 follow-up frame", dev.mesh_id)
+            return
         key = BUTTON_KEYS.get(dev.panel, BUTTON_KEYS[PANEL_TWO]).get(button)
         if key is not None and self._is_new_press(dev, key):
             async_dispatcher_send(self.hass, f"{SIGNAL_UPDATE}_{dev.hex_id}_button_{key}", "press")
@@ -498,6 +504,19 @@ class MeshCoordinator:
         dev.extra[burst_key] = now
         if REPEAT_MIN <= now - last_burst <= REPEAT_MAX:
             _LOGGER.debug("%04x: ignoring periodic repeat of button %s", dev.mesh_id, button)
+            return False
+        return True
+
+    @staticmethod
+    def _is_v2_tail(dev: MeshDevice, button: int) -> bool:
+        """A V2 "button 2" frame within V2_TAIL of the last press is not a press.
+
+        The window runs from the press itself (follow-ups do not extend it), so
+        a real bottom-right press is only lost if it comes within ~8 s.
+        """
+        now = time.monotonic()
+        if button != V2_TAIL_BUTTON or now - dev.extra.get("v2_press", -1e9) >= V2_TAIL:
+            dev.extra["v2_press"] = now
             return False
         return True
 

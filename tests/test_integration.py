@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from helpers import KEY
+from helpers import KEY, inject
 from helpers import make_entry as _entry
 from helpers import sent_payloads as _sent_payloads
 from helpers import setup as _setup
@@ -14,6 +14,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
+from custom_components.sg_csrmesh import coordinator as coordinator_mod
 from custom_components.sg_csrmesh.const import DOMAIN
 from custom_components.sg_csrmesh.csrmesh import crypto
 
@@ -127,6 +128,43 @@ async def test_switch_press_fires_event_once(hass: HomeAssistant, send):
         s for s in hass.states.async_all("event") if s.attributes.get("button") == "top_left"
     ]
     assert len(states) == 1 and states[0].state not in ("unknown", "unavailable")
+
+
+async def test_v2_switch_follow_up_frames_are_not_presses(hass: HomeAssistant, send):
+    """Trykkbryter 02 (9280, SmartSwitchV2), captured 19-20.10.2026 (docs 6.6)."""
+    entry = _entry({"9280": {"name": "Bryter", "kind": "switch"}})
+    await _setup(hass, entry)
+    coord = entry.runtime_data
+    p = {b: f"0080ff150000{b:02x}0008" for b in range(4)}
+    count = "0080ff07000014"
+    timeline = [  # (seconds, payload)
+        # bottom right, alone: two "02" copies and the follow-ups
+        (0.0, p[2]), (1.5, p[2]), (3.4, count), (4.5, p[2]), (5.2, p[2]), (6.9, p[2]),
+        # top left 40 s later: "00", then "02" follow-ups for ~7 s
+        (40.2, p[0]), (41.6, p[2]), (43.6, count), (44.5, p[2]), (45.5, p[2]), (46.8, p[2]),
+        # held top left: "00" repeated, no follow-ups
+        (80.0, count), (80.9, p[0]), (81.9, p[0]), (83.2, p[0]),
+        # top right, then a real bottom right well after the follow-ups
+        (120.0, p[3]), (121.3, p[2]), (126.0, p[2]),
+        (140.0, p[2]),
+    ]
+    presses = []
+    real_send = coordinator_mod.async_dispatcher_send
+
+    def record(hass_, signal, *args):
+        if "_button_" in signal:
+            presses.append(signal.rsplit("_button_", 1)[1])
+        real_send(hass_, signal, *args)
+
+    with (
+        patch.object(coordinator_mod, "async_dispatcher_send", side_effect=record),
+        patch.object(coordinator_mod, "time") as clock,
+    ):
+        for seq, (t, payload) in enumerate(timeline, start=10):
+            clock.monotonic.return_value = 1000 + t
+            inject(coord, 0x9280, payload, seq)
+    assert presses == ["bottom_right", "top_left", "top_left", "top_right", "bottom_right"]
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 # --- static checks -------------------------------------------------------------
