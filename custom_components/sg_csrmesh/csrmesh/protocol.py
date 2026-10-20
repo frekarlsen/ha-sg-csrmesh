@@ -196,8 +196,8 @@ def parse_switch_event(msg: Message) -> int | None:
 
 
 # Smart Switch V2 (body ``BTN 00 08``/``BTN 00 09``) follows every short press
-# with ``02 00 08`` frames for ~7 s, whichever button was pressed (docs 6.6).
-V2_TAIL_BUTTON = 2
+# with frames for ~7 s that name the button last *held*, whichever button was
+# pressed (docs 6.1, 9280).
 
 
 def is_v2_switch_frame(msg: Message) -> bool:

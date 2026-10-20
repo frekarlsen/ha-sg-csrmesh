@@ -66,7 +66,6 @@ from .csrmesh.protocol import (
     OWN_TAG_DESTS,
     SG_TAG,
     STATUS_OPS,
-    V2_TAIL_BUTTON,
     DeviceKind,
     Message,
     is_v2_switch_frame,
@@ -109,7 +108,8 @@ from .models import BUTTON_KEYS, PANEL_TWO, Model, model_for
 _LOGGER = logging.getLogger(__name__)
 
 PRESS_DEDUP = 3.0  # s; copies of one press arrive within this
-V2_TAIL = 8.0  # s; a V2 switch sends "button 2" frames this long after a press
+V2_TAIL = 8.0  # s; a V2 switch sends follow-up frames this long after a press
+V2_LEARN = 2.5  # s; its first follow-up comes 1.0-1.6 s after the press
 REPEAT_MIN, REPEAT_MAX = 32.0, 40.0  # s; a switch's own periodic repeat
 POLL_SPACING = 0.3  # s between per-device polls, like the gateway
 
@@ -509,16 +509,28 @@ class MeshCoordinator:
 
     @staticmethod
     def _is_v2_tail(dev: MeshDevice, button: int) -> bool:
-        """A V2 "button 2" frame within V2_TAIL of the last press is not a press.
+        """Tell a V2 switch's follow-up frames from presses.
 
-        The window runs from the press itself (follow-ups do not extend it), so
-        a real bottom-right press is only lost if it comes within ~8 s.
+        After a short press the switch sends, for ~7 s, frames naming the button
+        that was last held, not the one pressed. A different button within
+        V2_LEARN of a press is such a follow-up (and teaches which button they
+        name); later in the window only that button and the pressed one are.
+        The window runs from the press, so follow-ups do not extend it; a hold
+        longer than that is merged by the normal dedup.
         """
         now = time.monotonic()
-        if button != V2_TAIL_BUTTON or now - dev.extra.get("v2_press", -1e9) >= V2_TAIL:
-            dev.extra["v2_press"] = now
-            return False
-        return True
+        since = now - dev.extra.get("v2_press_at", -1e9)
+        if since < V2_TAIL:
+            if button == dev.extra.get("v2_press_btn"):
+                return True  # a copy, a hold or a follow-up naming the same button
+            if since < V2_LEARN:
+                dev.extra["v2_tail_btn"] = button
+                return True
+            if button == dev.extra.get("v2_tail_btn"):
+                return True
+        dev.extra["v2_press_at"] = now
+        dev.extra["v2_press_btn"] = button
+        return False
 
     def _poll_tags(self, mesh_id: int) -> tuple[bytes, ...]:
         """A device ignores a poll with the wrong tag: try both until known."""

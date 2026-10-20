@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0rc6 – 2026-10-20
+
+- **Smart Switch V2 ghost presses, second try.** The follow-up frames after a short press name the
+  button that was last *held*, not always bottom right (rc5 only handled that case). A different
+  button within 2.5 s of a press is now taken as a follow-up and remembered; for the rest of an 8 s
+  window only that button and the pressed one are ignored, so other buttons still register.
+
 ## 0.7.0rc5 – 2026-10-20
 
 - **Fixed: ghost presses "bottom right" on Smart Switch V2.** After every short press, a V2 switch

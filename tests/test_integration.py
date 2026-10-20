@@ -136,17 +136,25 @@ async def test_v2_switch_follow_up_frames_are_not_presses(hass: HomeAssistant, s
     await _setup(hass, entry)
     coord = entry.runtime_data
     p = {b: f"0080ff150000{b:02x}0008" for b in range(4)}
-    count = "0080ff07000014"
-    timeline = [  # (seconds, payload)
-        # bottom right, alone: two "02" copies and the follow-ups
-        (0.0, p[2]), (1.5, p[2]), (3.4, count), (4.5, p[2]), (5.2, p[2]), (6.9, p[2]),
-        # top left 40 s later: "00", then "02" follow-ups for ~7 s
-        (40.2, p[0]), (41.6, p[2]), (43.6, count), (44.5, p[2]), (45.5, p[2]), (46.8, p[2]),
-        # held top left: "00" repeated, no follow-ups
-        (80.0, count), (80.9, p[0]), (81.9, p[0]), (83.2, p[0]),
-        # top right, then a real bottom right well after the follow-ups
-        (120.0, p[3]), (121.3, p[2]), (126.0, p[2]),
-        (140.0, p[2]),
+    n = "0080ff07000004"
+    timeline = [  # (seconds, payload), as captured
+        # 08:25 bottom right alone (follow-ups name 02, the button last held)
+        (0.0, p[2]), (1.5, p[2]), (3.4, n), (4.5, p[2]), (5.2, p[2]), (6.9, p[2]),
+        # 08:26 top left: "00", then "02" follow-ups
+        (40.2, p[0]), (41.6, p[2]), (43.6, n), (44.5, p[2]), (45.5, p[2]), (46.8, p[2]),
+        # 08:27 top left held: the follow-ups name 00 from now on
+        (80.0, n), (80.9, p[0]), (81.9, p[0]), (83.2, p[0]),
+        # 08:50 bottom left, bottom right, top right, top left, 15 s apart
+        (100.0, p[1]), (101.6, p[0]), (104.4, p[0]), (105.4, p[0]), (107.0, p[0]),
+        (115.9, p[2]), (117.5, p[0]), (120.5, p[0]), (121.2, p[0]), (122.7, p[0]),
+        (131.4, p[3]), (132.3, p[0]), (135.0, p[0]), (136.1, p[0]), (137.4, p[0]),
+        (145.7, p[0]), (147.2, p[0]), (149.9, p[0]), (151.2, p[0]), (152.5, p[0]),
+        # 08:54 bottom right held: follow-ups name 02 again
+        (200.0, n), (202.0, p[2]), (203.5, p[2]),
+        # 08:55 bottom left
+        (240.0, p[1]), (241.6, p[2]), (244.2, p[2]), (245.3, p[2]), (246.7, p[2]),
+        # a different real button 4 s after a press still counts
+        (300.0, p[3]), (301.2, p[2]), (304.0, p[1]),
     ]
     presses = []
     real_send = coordinator_mod.async_dispatcher_send
@@ -163,7 +171,12 @@ async def test_v2_switch_follow_up_frames_are_not_presses(hass: HomeAssistant, s
         for seq, (t, payload) in enumerate(timeline, start=10):
             clock.monotonic.return_value = 1000 + t
             inject(coord, 0x9280, payload, seq)
-    assert presses == ["bottom_right", "top_left", "top_left", "top_right", "bottom_right"]
+    assert presses == [
+        "bottom_right", "top_left", "top_left",
+        "bottom_left", "bottom_right", "top_right", "top_left",
+        "bottom_right", "bottom_left",
+        "top_right", "bottom_left",
+    ]
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 

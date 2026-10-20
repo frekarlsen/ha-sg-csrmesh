@@ -337,16 +337,30 @@ rammen kom fram til HA, regnet fra første ramme etter trykket.
 | Øverst venstre holdt ca. 3 s (08:27:07) | `ff07 0000 00` 0,0 / 0,5 s; `00 00 08` 0,9 / 1,9 / 3,2 s; ingen `02` etterpå |
 | 19.10 kveld: øverst venstre, øverst høyre, nederst venstre | først riktig knapp (`00`, `03`, `01`), så `02 00 08` 3–4 ganger de neste ca. 7 s |
 
-- **Etter hvert korte trykk sender bryteren `02 00 08` i ca. 7 s, uansett knapp.** HA tolket det som
-  trykk nederst til høyre. Betydningen er ukjent (kanskje «sluppet»), men den er lik for alle knapper.
-- Et ekte trykk nederst til høyre er også `02 00 08`. De kan bare skilles på tid: det første `02` etter
-  minst 8 s er et trykk.
-- `ff07 0000 N` kommer ca. 3,4 s etter trykket, 2–4 ganger. N var `10`–`14` for fem trykk og så `00`, så
-  det er ikke en enkel teller. Brukes ikke.
-- Holdt knapp gir `BTN 00 08` omtrent hvert sekund, og ikke noe etterslep.
-- **I integrasjonen (0.7.0rc5):** for brytere med `BTN 00 xx` ignoreres `02` i 8 s etter et trykk
-  (regnet fra trykket, ikke fra etterslepet). Et ekte trykk nederst til høyre innen 8 s etter et annet
-  trykk går derfor tapt. Gen4 (`BTN 01 01`) er ikke berørt.
+**20.10.2026, etter 0.7.0rc5:** etterslepet byttet knapp. Hvert trykk 15 s fra hverandre:
+
+| Trykk | Første ramme | Etterslep (+1,0–1,6 s, så +4, +5, +7 s) | `ff07` |
+|---|---|---|---|
+| nederst venstre 08:50:00 | `01 00 08` | `00 00 08` ×4 | `04` |
+| nederst høyre 08:50:15 | `02 00 08` | `00 00 08` ×4 | `05` |
+| øverst høyre 08:50:30 | `03 00 08` | `00 00 08` ×4 | `06` |
+| øverst venstre 08:50:45 | `00 00 08` | `00 00 08` ×4 | `07` |
+| nederst høyre **holdt** ca. 3 s, 08:54:23 | `ff07 0000 07` (uendret) 0,0 / 0,6 s, så `02 00 08` 2,0 / 3,5 s | – | `07` |
+| øverst venstre ca. 08:54:40 | ingen rammer (trykket kom ikke fram eller ble ikke registrert av bryteren) | – | – |
+| nederst venstre 08:55:07 | `01 00 08` | `02 00 08` ×4 | `08` |
+
+- **Etterslepet etter et kort trykk navngir den knappen som sist ble holdt inne**, ikke den som ble
+  trykket. Før 08:27 var det `02`, etter hold øverst venstre 08:27 var det `00`, etter hold nederst
+  høyre 08:54 `02` igjen.
+- Første ramme er alltid riktig knapp. Første etterslep kommer 1,0–1,6 s etter.
+- `ff07 0000 N` øker med én for hvert korte trykk og står stille ved hold. Den kom ca. 3,4 s etter
+  trykket. Telleren hoppet fra `14` til `00` 20.10 08:26 (ukjent hvorfor). Brukes ikke.
+- Holdt knapp gir `BTN 00 08` omtrent hvert 1–1,5 s.
+- **I integrasjonen (0.7.0rc6):** for brytere med `BTN 00 xx` gjelder et vindu på 8 s fra hvert trykk.
+  En annen knapp de første 2,5 s regnes som etterslep, og HA husker hvilken knapp etterslepet
+  navngir. Senere i vinduet ignoreres bare den knappen og den trykkede; andre knapper er nye trykk.
+  Tap: en annen knapp innen 2,5 s etter et trykk, eller etterslepsknappen innen 8 s. Gen4 (`BTN 01 01`)
+  er ikke berørt. (rc5 ignorerte bare `02` og klarte ikke etterslep med `00`.)
 
 ### 6.2 Plan
 
@@ -390,7 +404,7 @@ SG-appen for en enhet som fortsatt er på gatewayen mens fangsten går.
   bekreftet for `GD` = `DimmerGen4` (`9640`). `MO` er en LEDDim Smart Pill Micro ifølge SG-appen
   (`MODBC3`).
 - Bryterens egen paringstabell kan ikke leses. HA fører sin egen oversikt.
-- Smart Switch V2: hva etterslepet `02 00 08` og `ff07 0000 N` betyr (6.1, `9280`).
+- Smart Switch V2: hvorfor bryteren sender etterslep, og hva `ff07 0000 N` brukes til (6.1, `9280`).
 
 ## 8. I integrasjonen (0.7.0rc2)
 
