@@ -1,93 +1,140 @@
 # SG Smart Gen1 (CSRmesh) for Home Assistant
 
-Lokal styring av SG Smart-enheter som bruker CSRmesh, direkte fra Home Assistant over Bluetooth via en
-ESPHome Bluetooth-proxy. Gatewayen, HomeKit og skyen trengs ikke. Integrasjonen bruker anleggets egen
-nettverks-PIN og enhetsadresser.
+Lokal styring av førstegenerasjons SG Smart-enheter (CSRmesh) direkte fra Home Assistant, over Bluetooth
+via en ESPHome Bluetooth-proxy. Du trenger verken SG-gatewayen, HomeKit eller skyen. Integrasjonen bruker
+anleggets egen nettverks-PIN og enhetenes mesh-adresser.
 
 Søsterprosjekt for SG Smart 3.0 (Bluetooth SIG Mesh):
 [ha-sg-smart-mesh](https://github.com/frekarlsen/ha-sg-smart-mesh).
 
-## Status (v0.7.0)
+> Uoffisiell og ikke tilknyttet SG Armaturen. Versjon 0.7.0 er i testfasen (`rc`).
 
-| Enhet | I HA | Status |
+## Støttede enheter
+
+| Enhet | I Home Assistant | Status |
 |---|---|---|
-| LEDDim Smart, LEDDim Smart Pill Micro | `light` med dimming | Virker. Endringer gjort for hånd kommer som `FF50`/`FF88` |
+| LEDDim Smart (også Gen4) | `light` med dimming | Virker |
+| LEDDim Smart Pill Micro (også Gen4) | `light` med dimming | Virker |
 | LEDDim Smart Pill On/Off Micro | `light` av/på | Virker |
-| Smart Switch | `event` per knapp, batteri, «Styrer» | Virker. To vipper eller én stor vippe velges ved oppsett |
-| HeatReg Smart | `climate`, gulv- og romtemperatur | Ønsket temperatur og av/på, verifisert |
+| Smart Switch (V2 og Gen4) | én `event` per knapp, batteri, «Styrer» | Virker. To vipper eller én stor vippe |
+| HeatReg Smart | `climate`, gulv- og romtemperatur | Ønsket temperatur og av/på |
 
-Innstillinger som lagres i enheten, vises under **Konfigurasjon** på enhetssiden:
+Endringer gjort for hånd (bryter eller trykknapp) fanges opp, så HA alltid viser riktig tilstand.
+
+Innstillinger som lagres i selve enheten, finner du under **Konfigurasjon** på enhetssiden:
 
 | Innstilling | Modeller | Lest fra enheten |
 |---|---|---|
-| Minimumsnivå i dimmeren, oppstartsnivå, maksnivå | Pill Micro og Gen4 | Ja, og lest tilbake etter endring |
-| Fading og dimmehastighet | Gen4 | Nei: viser det HA sist sendte |
-| Trykkbryterinngang (trykkbryter / sensor) | Gen4 | Nei: viser det HA sist sendte |
-
-### Oppsett av en enhet
-
-Alt gjøres under **Innstillinger → Enheter og tjenester → SG Smart Gen1 → Konfigurer**:
-
-- **Flytt en enhet fra SG-gatewayen:** navn, rom og modell hentes fra gatewayen (HomeKit), og HA finner
-  adressen selv.
-- **Legg til ny (fabrikkresatt) enhet:** HA legger enheten inn i nettverket. Du velger navn, rom og modell.
-- **Legg til med mesh-adresse:** for avanserte brukere.
-- For en **Smart Switch** velger du også panelet: to vipper (fire knapper) eller én stor vippe.
-- **Endre en enhet:** bytt modell eller bryterpanel senere. Enheter lagt til før 0.7.0 får et varsel
-  under Reparasjoner til modellen er valgt.
-
-Modellen bestemmer hvilke innstillinger enheten får. Den kan ikke leses over meshen. SG-appen viser modell og
-fastvare under enhetsinformasjonen: Gen4-enheter har fastvare 1.x.x, eldre LEDDim Smart 1.59 og eldre Pill
-Micro 1.13.
-
-### Koble en Smart Switch til et lys
-
-**Konfigurer → Koble en Smart Switch til et lys:** velg vippe og lys, trykk Send, og trykk så kort på
-bryteren. Bryteren lagrer koblingen og styrer lyset direkte, også når HA er nede. Øverst slår på (hold:
-dimmer opp), nederst slår av (hold: dimmer ned). Samme sted fjernes en kobling.
-
-- En bryter kan bare styre lys som er satt opp på samme måte: begge flyttet fra SG-gatewayen, eller begge
-  lagt til av HA. Dialogen viser bare lys som passer.
-- «Styrer» (på bryteren) og «Styres av» (på lyset) er HAs egen oversikt over koblinger gjort fra HA. En
-  bryter kan ikke spørres om koblingene sine, så koblinger gjort i SG-appen vises ikke.
-- Knappene gir fortsatt hendelser i HA, også når de er koblet til et lys.
+| Minimumsnivå, oppstartsnivå og maksnivå | Pill Micro og Gen4 | Ja, og lest tilbake etter endring |
+| Fading og dimmehastighet | Gen4 | Nei, viser det HA sist sendte |
+| Trykkbryterinngang (trykkbryter / sensor) | Gen4 | Nei, viser det HA sist sendte |
 
 ## Krav
 
 - Home Assistant 2025.8 eller nyere.
-- ESPHome Bluetooth-proxy med aktive tilkoblinger:
+- En ESPHome Bluetooth-proxy med aktive tilkoblinger:
   ```yaml
   bluetooth_proxy:
     active: true
   ```
-- Minst én mesh-node (`@NDxxxx`, `@MDxxxx` …) innen rekkevidde av proxyen. Hvilken som helst node sender
-  videre inn i hele meshen.
+- Minst én SG-enhet innen rekkevidde av proxyen. Meldinger videresendes gjennom hele meshen, så resten
+  av huset nås via den.
+- Nettverks-PIN-en til SG-anlegget (fra SG-appen eller gatewayen).
 
-## Verktøy for kartlegging
+## Installasjon
+
+**HACS (anbefalt)**
+
+1. HACS → menyen øverst til høyre → **Egendefinerte repositorier**.
+2. Legg til `https://github.com/frekarlsen/ha-sg-csrmesh` som type **Integrasjon**.
+3. Installer **SG Smart Gen1 (CSRmesh)** og start Home Assistant på nytt.
+
+**Manuelt**
+
+Kopier mappen `custom_components/sg_csrmesh` til `config/custom_components/` og start Home Assistant
+på nytt.
+
+Legg deretter til integrasjonen under **Innstillinger → Enheter og tjenester → Legg til integrasjon →
+SG Smart Gen1**, og oppgi PIN-en.
+
+## Legge til enheter
+
+Alt gjøres under **Innstillinger → Enheter og tjenester → SG Smart Gen1 → Konfigurer**:
+
+- **Flytt en enhet fra SG-gatewayen:** navn, rom og modell hentes fra gatewayen (via HomeKit), og HA
+  finner adressen selv.
+- **Legg til en ny enhet:** for fabrikkresatte enheter, og enheter som er fjernet fra SG-gatewayen. HA
+  søker gjennom meshen. Finner den ikke enheten, kan HA koble seg direkte til enheten, slik SG-appen gjør
+  fra telefonen.
+- **Legg til med mesh-adresse:** for avanserte brukere.
+- **Endre en enhet:** bytt modell eller bryterpanel senere.
+
+Modellen bestemmer hvilke innstillinger enheten får, og må velges ved oppsett, fordi den ikke kan leses
+over meshen. SG-appen viser modell og fastvare under enhetsinformasjonen.
+
+For en **Smart Switch** velger du også panel: to vipper (fire knapper) eller én stor vippe.
+
+## Smart Switch
+
+### Bruke knappene i automasjoner
+
+Hver knapp blir en egen hendelsesentitet, for eksempel `event.trykkbryter_overst_venstre`. Bruk
+utløseren **Hendelse mottatt** (`event.received`) med hendelsestypen `press`:
+
+```yaml
+triggers:
+  - trigger: event.received
+    target:
+      entity_id: event.trykkbryter_overst_venstre
+    options:
+      event_type: [press]
+```
+
+Hvert trykk gir én hendelse. Holder du en knapp inne, registreres det også som ett trykk.
+
+### Koble en bryter direkte til et lys
+
+**Konfigurer → Koble en Smart Switch til et lys:** velg vippe og lys, trykk **Send**, og trykk så kort på
+bryteren. Bryteren lagrer koblingen og styrer lyset direkte, også når HA er nede. Øverst slår på (hold:
+dimmer opp), nederst slår av (hold: dimmer ned). Samme sted fjerner du en kobling.
+
+- En bryter kan bare styre lys som er satt opp på samme måte: begge flyttet fra SG-gatewayen, eller begge
+  lagt til av HA. Dialogen viser bare lys som passer.
+- «Styrer» (på bryteren) og «Styres av» (på lyset) er HAs egen oversikt over koblinger gjort fra HA.
+  Bryteren kan ikke spørres om koblingene sine, så koblinger gjort i SG-appen vises ikke.
+- Knappene gir fortsatt hendelser i HA når de er koblet til et lys.
+
+### Kjent begrensning for Smart Switch V2
+
+En V2-bryter sender ekstra meldinger i omtrent 7 sekunder etter hvert korte trykk, og disse ser ut som
+trykk på en annen knapp. Integrasjonen filtrerer dem bort. Et trykk på en *annen* knapp mindre enn
+2,5 sekunder etter forrige trykk blir derfor ikke registrert. Det samme gjelder et nytt trykk på samme
+knapp innen 8 sekunder. Gen4-brytere har ikke denne begrensningen.
+
+## Feilsøking og kartlegging
 
 - `sg_csrmesh.capture`: logger alle rammer på ditt eget nettverk, dekryptert med din egen PIN. Rammene
-  kommer som `sg_csrmesh_frame`-hendelser og vises under Diagnostikk.
+  kommer som `sg_csrmesh_frame`-hendelser og vises i diagnostikken.
 - `sg_csrmesh.send`: sender rå meldinger (`<adresse LE> <opkode> <tag> <data>`).
 - `sg_csrmesh.send_on_press`: venter på et trykk fra en batteribryter og sender da med en gang.
+
+Protokollen og alle maskinvaretester er dokumentert i [docs/gen1-protocol.md](docs/gen1-protocol.md).
 
 ## Utvikling
 
 ```sh
 uv venv -p 3.14 && uv pip install -r requirements-test.txt
-git clone https://github.com/nkaminski/csrmesh /tmp/csrmesh   # valgfri kryssjekk av kryptoen
 pytest tests
 ruff check custom_components tests
 ```
 
-Arkitektur:
-
 ```
-csrmesh/crypto.py     nøkkel fra PIN, AES-128-OFB + HMAC-rammer        (ren Python)
-csrmesh/protocol.py   SG-meldinger, statusparser, fragmentsamling      (ren Python)
+csrmesh/crypto.py     nøkkel fra PIN, AES-128-OFB + HMAC-rammer          (ren Python)
+csrmesh/protocol.py   SG-meldinger, statusparser, fragmentsamling        (ren Python)
 csrmesh/settings.py   trim, fading, trykkbryter, fastvare, bryteroppsett (ren Python)
 csrmesh/heatreg.py    HeatReg: status, temperaturer, ønsket temperatur   (ren Python)
 models.py             SGs modeller og hvilke innstillinger hver har
-bridge.py             én GATT-link via HA Bluetooth / ESPHome-proxy
+bridge.py             én GATT-forbindelse via HA Bluetooth / ESPHome-proxy
 coordinator.py        enheter, tilstand, levering med kvittering, innstillinger, bryteroppsett
 migrate.py            flytting fra SG-gatewayen (HomeKit)
 provision.py          legge til og fjerne enheter (MASP)
